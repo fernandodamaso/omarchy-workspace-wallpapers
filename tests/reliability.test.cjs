@@ -67,3 +67,15 @@ test('retiring a screen invalidates its pending render completion', () => {
   assert.equal(stale.action, 'stale');
   assert.deepEqual(stale.state, retired);
 });
+
+test('special workspaces retain the last normal wallpaper workspace', () => {
+  const normal = { id: 7, name: 'Dev Ω Space' };
+  const named = { id: -3, name: 'Design 東京' };
+  const scratch = { id: -99, name: 'special:scratchpad' };
+
+  assert.equal(Model.wallpaperWorkspace(normal, null), normal);
+  assert.equal(Model.wallpaperWorkspace(named, normal), named);
+  assert.equal(Model.wallpaperWorkspace(scratch, named), named);
+  assert.equal(Model.wallpaperWorkspace(scratch, null), null);
+  assert.equal(Model.wallpaperWorkspace(scratch, { id: -98, name: 'special:old' }), null);
+});
