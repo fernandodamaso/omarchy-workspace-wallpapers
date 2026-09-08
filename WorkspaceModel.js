@@ -165,6 +165,19 @@ function completeRender(state, generation, imagePath, ok) {
     }
   }
 
+  if (current.fallback && current.fallback !== current.requested) {
+    return {
+      action: "fallback",
+      state: {
+        generation: current.generation + 1,
+        requested: current.fallback,
+        fallback: "",
+        displayed: current.displayed,
+        displayedGeneration: current.displayedGeneration
+      }
+    }
+  }
+
   return {
     action: "clear",
     state: {
