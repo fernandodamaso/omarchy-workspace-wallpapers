@@ -1,3 +1,4 @@
+import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Wayland
 import QtQuick
@@ -21,6 +22,7 @@ PanelWindow {
   readonly property string workspaceKey: controller.preferredWorkspaceKey(activeWorkspace)
   readonly property string assignedBackground: controller.assignmentForWorkspace(activeWorkspace)
   readonly property string imagePath: assignedBackground || controller.displayedBackground
+  readonly property string sourceUrl: !imagePath ? "" : (assignedBackground ? Util.fileUrl(imagePath) : Util.fileUrl(imagePath) + "?v=" + controller.backgroundVersion)
 
   ScreenMoveRemap {
     id: remapGuard
@@ -39,7 +41,7 @@ PanelWindow {
 
   Image {
     anchors.fill: parent
-    source: panel.imagePath ? Util.fileUrl(panel.imagePath) : ""
+    source: panel.sourceUrl
     visible: panel.imagePath !== ""
     fillMode: Image.PreserveAspectCrop
     asynchronous: true

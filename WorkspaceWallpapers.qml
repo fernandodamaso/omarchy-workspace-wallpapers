@@ -17,6 +17,7 @@ Item {
   property var configState: Model.emptyState()
   property string currentBackground: ""
   property string displayedBackground: ""
+  property int backgroundVersion: 0
   property string pendingAssignmentKey: ""
   property string pendingAssignmentSource: ""
   property string pendingPickerKey: ""
@@ -124,6 +125,7 @@ Item {
     var normalized = Model.normalizeImagePath(String(path || "").trim())
     currentBackground = normalized
     displayedBackground = normalized
+    backgroundVersion += 1
   }
 
   function transitionNativeBackground(fromPath, path) {
