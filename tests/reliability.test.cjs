@@ -22,3 +22,27 @@ test('latest render request wins over stale asynchronous completions', () => {
   assert.equal(currentC.state.displayed, '/tmp/c.png');
   assert.equal(currentC.state.displayedGeneration, c.generation);
 });
+
+test('failed assigned image falls back once without mutating the assignment model', () => {
+  const assigned = '/tmp/assigned.png';
+  const fallback = '/tmp/fallback.webp';
+  const request = Model.requestRender(Model.emptyRenderState(), assigned, fallback);
+  const failedAssigned = Model.completeRender(request, request.generation, assigned, false);
+
+  assert.equal(failedAssigned.action, 'fallback');
+  assert.equal(failedAssigned.state.generation, request.generation + 1);
+  assert.equal(failedAssigned.state.requested, fallback);
+  assert.equal(failedAssigned.state.fallback, '');
+
+  const failedFallback = Model.completeRender(
+    failedAssigned.state,
+    failedAssigned.state.generation,
+    fallback,
+    false
+  );
+
+  assert.equal(failedFallback.action, 'clear');
+  assert.equal(failedFallback.state.requested, '');
+  assert.equal(failedFallback.state.fallback, '');
+  assert.equal(failedFallback.state.displayed, '');
+});
