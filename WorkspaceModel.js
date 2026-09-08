@@ -110,6 +110,73 @@ function statusPayload(state, fallback, statePath) {
   }
 }
 
+function emptyRenderState() {
+  return {
+    generation: 0,
+    requested: "",
+    fallback: "",
+    displayed: "",
+    displayedGeneration: 0
+  }
+}
+
+function normalizeRenderState(state) {
+  var source = state && typeof state === "object" ? state : emptyRenderState()
+  var generation = Number(source.generation)
+  var displayedGeneration = Number(source.displayedGeneration)
+  return {
+    generation: Number.isInteger(generation) && generation >= 0 ? generation : 0,
+    requested: normalizeImagePath(source.requested),
+    fallback: normalizeImagePath(source.fallback),
+    displayed: normalizeImagePath(source.displayed),
+    displayedGeneration: Number.isInteger(displayedGeneration) && displayedGeneration >= 0
+      ? displayedGeneration : 0
+  }
+}
+
+function requestRender(state, requestedPath, fallbackPath) {
+  var current = normalizeRenderState(state)
+  return {
+    generation: current.generation + 1,
+    requested: normalizeImagePath(requestedPath),
+    fallback: normalizeImagePath(fallbackPath),
+    displayed: current.displayed,
+    displayedGeneration: current.displayedGeneration
+  }
+}
+
+function completeRender(state, generation, imagePath, ok) {
+  var current = normalizeRenderState(state)
+  var path = normalizeImagePath(imagePath)
+  if (generation !== current.generation || path !== current.requested) {
+    return { action: "stale", state: current }
+  }
+
+  if (ok === true) {
+    return {
+      action: "display",
+      state: {
+        generation: current.generation,
+        requested: current.requested,
+        fallback: current.fallback,
+        displayed: current.requested,
+        displayedGeneration: current.generation
+      }
+    }
+  }
+
+  return {
+    action: "clear",
+    state: {
+      generation: current.generation,
+      requested: "",
+      fallback: "",
+      displayed: "",
+      displayedGeneration: current.generation
+    }
+  }
+}
+
 if (typeof module !== "undefined") {
   module.exports = {
     isSpecialWorkspaceName: isSpecialWorkspaceName,
@@ -122,6 +189,9 @@ if (typeof module !== "undefined") {
     assignmentForWorkspace: assignmentForWorkspace,
     withAssignment: withAssignment,
     withoutAssignment: withoutAssignment,
-    statusPayload: statusPayload
+    statusPayload: statusPayload,
+    emptyRenderState: emptyRenderState,
+    requestRender: requestRender,
+    completeRender: completeRender
   }
 }
