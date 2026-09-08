@@ -42,6 +42,17 @@ function preferredWorkspaceKey(workspace) {
   return keys.length ? keys[0] : ""
 }
 
+function wallpaperWorkspace(currentWorkspace, previousNormalWorkspace) {
+  var current = currentWorkspace && typeof currentWorkspace === "object"
+    ? currentWorkspace : null
+  if (current && !isSpecialWorkspaceName(current.name)) return current
+
+  var previous = previousNormalWorkspace && typeof previousNormalWorkspace === "object"
+    ? previousNormalWorkspace : null
+  if (previous && !isSpecialWorkspaceName(previous.name)) return previous
+  return null
+}
+
 function normalizeImagePath(value) {
   var path = asString(value)
   if (!path || path[0] !== "/" || path.indexOf("\0") !== -1) return ""
@@ -207,6 +218,7 @@ if (typeof module !== "undefined") {
     normalizeWorkspaceKey: normalizeWorkspaceKey,
     workspaceKeyCandidates: workspaceKeyCandidates,
     preferredWorkspaceKey: preferredWorkspaceKey,
+    wallpaperWorkspace: wallpaperWorkspace,
     normalizeImagePath: normalizeImagePath,
     emptyState: emptyState,
     parseState: parseState,
