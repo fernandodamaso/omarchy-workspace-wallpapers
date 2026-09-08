@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  echo "Usage: $0 /absolute/path/to/image" >&2
+  exit 2
+}
+
+[[ $# -eq 1 ]] || usage
+source_path=$1
+[[ $source_path == /* && -f $source_path ]] || {
+  echo "import-image: source must be an existing absolute file path" >&2
+  exit 2
+}
+
+mime=$(file --brief --mime-type -- "$source_path")
+case "$mime" in
+  image/png) ext=png ;;
+  image/jpeg) ext=jpg ;;
+  image/webp) ext=webp ;;
+  *)
+    echo "import-image: unsupported MIME type: $mime (expected image/png, image/jpeg, or image/webp)" >&2
+    exit 3
+    ;;
+esac
+
+data_home=${XDG_DATA_HOME:-"$HOME/.local/share"}
+destination_dir="$data_home/omarchy/workspace-wallpapers/images"
+mkdir -p -- "$destination_dir"
+
+digest=$(sha256sum -- "$source_path" | awk '{print $1}')
+destination="$destination_dir/$digest.$ext"
+
+if [[ ! -f $destination ]]; then
+  temporary="$destination.tmp.$$"
+  trap 'rm -f -- "${temporary:-}"' EXIT
+  install -m 0644 -- "$source_path" "$temporary"
+  mv -f -- "$temporary" "$destination"
+  trap - EXIT
+fi
+
+printf '%s\n' "$destination"

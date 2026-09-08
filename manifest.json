@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.fernandodamaso.workspace-wallpapers",
+  "name": "Workspace Wallpapers",
+  "version": "0.1.0",
+  "author": "Fernando Dâmaso",
+  "license": "MIT",
+  "description": "Static per-workspace wallpapers for Omarchy.",
+  "kinds": [
+    "service"
+  ],
+  "entryPoints": {
+    "service": "WorkspaceWallpapers.qml"
+  },
+  "omarchy": {
+    "clonedFrom": "omarchy.background"
+  }
+}
