@@ -64,6 +64,37 @@ test('v0.1 renderer and import helper stay static-image only', () => {
   assert.doesNotMatch(importer, /video\//);
 });
 
+test('WP-03 panel uses generation-safe per-screen loads and scratchpad retention', () => {
+  const panel = read('WorkspaceWallpaperPanel.qml');
+  assert.match(panel, /property var renderState:\s*Model\.emptyRenderState\(\)/);
+  assert.match(panel, /Model\.wallpaperWorkspace\(/);
+  assert.match(panel, /Model\.requestRender\(/);
+  assert.match(panel, /Model\.completeRender\(/);
+  assert.match(panel, /Model\.cancelRender\(/);
+  assert.match(panel, /property int loadGeneration:/);
+  assert.match(panel, /property string loadPath:/);
+  assert.match(panel, /Component\.onDestruction/);
+  assert.match(panel, /cache:\s*false/);
+});
+
+test('WP-03 same-path reloads are revision-driven without polling or idle writes', () => {
+  const service = read('WorkspaceWallpapers.qml');
+  const panel = read('WorkspaceWallpaperPanel.qml');
+  assert.match(service, /property int renderRevision:/);
+  assert.match(service, /renderRevision\s*\+=\s*1/);
+  assert.match(panel, /controller\.renderRevision/);
+  assert.doesNotMatch(service, /\bTimer\s*\{/);
+  assert.doesNotMatch(service, /\bhyprctl\b/);
+});
+
+test('theme transition keeps payload application independent of image decoding', () => {
+  const service = read('WorkspaceWallpapers.qml');
+  assert.match(
+    service,
+    /function\s+themeTransitionNative\([\s\S]*?setNativeBackground\([\s\S]*?applyThemePayload\(colorsB64,\s*shellB64\)/
+  );
+});
+
 test('local smoke handoff explicitly gates compositor-only behavior', () => {
   const smoke = read('docs/local-smoke.md');
   const required = [
