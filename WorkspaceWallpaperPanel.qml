@@ -20,6 +20,7 @@ PanelWindow {
 
   readonly property var hyprlandMonitor: Hyprland.monitorFor(modelData)
   readonly property var activeWorkspace: hyprlandMonitor ? hyprlandMonitor.activeWorkspace : null
+  readonly property int controllerRenderRevision: controller.renderRevision
 
   property var lastNormalWorkspace: null
   property var wallpaperWorkspace: null
@@ -109,13 +110,7 @@ PanelWindow {
   }
 
   onActiveWorkspaceChanged: updateWorkspace()
-
-  Connections {
-    target: controller
-    function onRenderRevisionChanged() {
-      panel.queueRender()
-    }
-  }
+  onControllerRenderRevisionChanged: queueRender()
 
   ScreenMoveRemap {
     id: remapGuard
