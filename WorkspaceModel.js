@@ -145,6 +145,17 @@ function requestRender(state, requestedPath, fallbackPath) {
   }
 }
 
+function cancelRender(state) {
+  var current = normalizeRenderState(state)
+  return {
+    generation: current.generation + 1,
+    requested: "",
+    fallback: "",
+    displayed: current.displayed,
+    displayedGeneration: current.displayedGeneration
+  }
+}
+
 function completeRender(state, generation, imagePath, ok) {
   var current = normalizeRenderState(state)
   var path = normalizeImagePath(imagePath)
@@ -205,6 +216,7 @@ if (typeof module !== "undefined") {
     statusPayload: statusPayload,
     emptyRenderState: emptyRenderState,
     requestRender: requestRender,
+    cancelRender: cancelRender,
     completeRender: completeRender
   }
 }
