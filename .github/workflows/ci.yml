@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  headless:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Node contract tests
+        run: node --test tests/*.test.cjs
+      - name: Import helper syntax
+        run: bash -n bin/import-image
+      - name: Whitespace checks
+        run: |
+          git diff --check
+          git diff --check origin/main...HEAD
