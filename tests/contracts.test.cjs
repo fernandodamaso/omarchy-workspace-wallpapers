@@ -46,6 +46,14 @@ test('per-screen panel resolves wallpaper from each monitor active workspace', (
   assert.match(panel, /Image\.PreserveAspectCrop/);
 });
 
+test('panel imports Quickshell root and native refresh can invalidate the global fallback image', () => {
+  const panel = read('WorkspaceWallpaperPanel.qml');
+  const service = read('WorkspaceWallpapers.qml');
+  assert.match(panel, /^import Quickshell$/m);
+  assert.match(service, /property int backgroundVersion:/);
+  assert.match(panel, /controller\.backgroundVersion/);
+});
+
 test('v0.1 renderer and import helper stay static-image only', () => {
   const panel = read('WorkspaceWallpaperPanel.qml');
   const importer = read('bin/import-image');
