@@ -46,3 +46,24 @@ test('failed assigned image falls back once without mutating the assignment mode
   assert.equal(failedFallback.state.fallback, '');
   assert.equal(failedFallback.state.displayed, '');
 });
+
+test('retiring a screen invalidates its pending render completion', () => {
+  const request = Model.requestRender(
+    Model.emptyRenderState(),
+    '/tmp/screen.png',
+    '/tmp/fallback.png'
+  );
+  const retired = Model.cancelRender(request);
+  const stale = Model.completeRender(
+    retired,
+    request.generation,
+    '/tmp/screen.png',
+    true
+  );
+
+  assert.equal(retired.generation, request.generation + 1);
+  assert.equal(retired.requested, '');
+  assert.equal(retired.fallback, '');
+  assert.equal(stale.action, 'stale');
+  assert.deepEqual(stale.state, retired);
+});
