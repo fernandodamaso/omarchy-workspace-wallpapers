@@ -82,6 +82,11 @@ test('assignment state changes only after FileView save confirmation', () => {
   assert.match(service, /pendingSave\s*=/);
 });
 
+test('failed saves reset FileView before the next mutation', () => {
+  const service = read('WorkspaceWallpapers.qml');
+  assert.match(service, /function failPendingSave\([\s\S]*?stateFile\.reload\(\)/);
+});
+
 test('service emits operationFinished on the root item for in-process panels', () => {
   const service = read('WorkspaceWallpapers.qml');
   // The IPC handler signal alone is unreachable through serviceFor(); the

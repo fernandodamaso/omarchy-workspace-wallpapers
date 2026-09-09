@@ -101,6 +101,7 @@ Item {
     pendingOperationReason = ""
     pendingSave = false
     finishOperation(operation, false, key, path, "save-failed:" + String(error))
+    stateFile.reload()
   }
 
   function finishOperation(operation, ok, key, path, reason, data) {
