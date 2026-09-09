@@ -13,8 +13,9 @@ test('manifest clones the stock Omarchy background service', () => {
   assert.equal(manifest.schemaVersion, 1);
   assert.equal(manifest.id, 'io.github.fernandodamaso.workspace-wallpapers');
   assert.equal(manifest.version, '0.1.0');
-  assert.deepEqual(manifest.kinds, ['service']);
+  assert.deepEqual(manifest.kinds, ['service', 'panel']);
   assert.equal(manifest.entryPoints.service, 'WorkspaceWallpapers.qml');
+  assert.equal(manifest.entryPoints.panel, 'Settings.qml');
   assert.equal(manifest.omarchy.clonedFrom, 'omarchy.background');
 });
 
@@ -36,6 +37,58 @@ test('workspace IPC exposes only WP-01 operations and an operationFinished signa
   }
   assert.match(service, /signal\s+operationFinished\(result:\s*string\)/);
   assert.doesNotMatch(service, /function\s+(playlist|schedule|randomize|video)\s*\(/i);
+});
+
+test('WP-02 panel uses the scoped service and native picker contracts', () => {
+  const settings = read('Settings.qml');
+  const picker = read('components/PickerController.qml');
+  const row = read('components/WorkspaceRow.qml');
+  assert.match(settings, /shell\.serviceFor\(manifest\.id\)/);
+  // The panel must call the service root's own methods; assign/clear exist
+  // only on the inner IpcHandler, not on the object serviceFor() returns.
+  assert.match(settings, /wallpaperService\.requestAssignment\(/);
+  assert.match(settings, /wallpaperService\.clearAssignment\(/);
+  // Picker directories mirror omarchy-theme-bg-switcher: current theme
+  // backgrounds plus the per-theme user folder; no invented env overrides.
+  assert.match(settings, /current\/theme\.name/);
+  assert.match(settings, /current\/theme\/backgrounds/);
+  assert.doesNotMatch(settings, /OMARCHY_IMAGE_SELECTOR/);
+  assert.match(settings, /composeWorkspaceRows/);
+  assert.match(settings, /onChooseRequested/);
+  assert.match(settings, /onResetRequested/);
+  assert.match(settings, /Keys\.onEscapePressed/);
+  assert.match(settings, /Color\.|Style\./);
+  assert.doesNotMatch(settings, /assignments\.json/);
+  assert.match(picker, /command\s*=\s*\[/);
+  assert.match(picker, /omarchy-menu-images/);
+  assert.match(picker, /targetKey/);
+  assert.match(picker, /expectedStop/);
+  assert.match(row, /signal\s+chooseRequested/);
+  assert.match(row, /signal\s+resetRequested/);
+});
+
+test('WP-02 optional menu example is an inert documented entry', () => {
+  const example = read('examples/omarchy-menu.jsonc');
+  assert.match(example, /Workspace Wallpapers/);
+  assert.match(example, /shell summon io\.github\.fernandodamaso\.workspace-wallpapers/);
+});
+
+test('assignment state changes only after FileView save confirmation', () => {
+  const service = read('WorkspaceWallpapers.qml');
+  assert.match(service, /atomicWrites:\s*true/);
+  assert.match(service, /pendingState/);
+  assert.match(service, /onSaved:\s*root\.commitPendingSave\(\)/);
+  assert.match(service, /onSaveFailed:/);
+  assert.match(service, /pendingSave\s*=/);
+});
+
+test('service emits operationFinished on the root item for in-process panels', () => {
+  const service = read('WorkspaceWallpapers.qml');
+  // The IPC handler signal alone is unreachable through serviceFor(); the
+  // panel's Connections target is the service root item.
+  assert.match(service, /signal\s+operationFinished\(result:\s*string\)/);
+  assert.match(service, /root\.operationFinished\(payload\)/);
+  assert.match(service, /workspaceIpc\.operationFinished\(payload\)/);
 });
 
 test('per-screen panel resolves wallpaper from each monitor active workspace', () => {

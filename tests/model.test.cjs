@@ -95,3 +95,42 @@ test('status payload is stable JSON-friendly data', () => {
     }
   );
 });
+
+test('workspace input accepts positive ids and exact named keys', () => {
+  assert.equal(Model.workspaceKeyFromInput('007'), 'id:7');
+  assert.equal(Model.workspaceKeyFromInput('name:Design Ω'), 'name:Design Ω');
+  assert.equal(Model.workspaceKeyFromInput('Design Ω'), 'name:Design Ω');
+  assert.equal(Model.workspaceKeyFromInput('special:terminal'), '');
+  assert.equal(Model.workspaceKeyFromInput('0'), '');
+});
+
+test('workspace rows combine live workspaces with saved absent assignments', () => {
+  assert.deepEqual(
+    Model.composeWorkspaceRows(
+      [{ id: 1, name: 'Main' }, { id: -4, name: 'Design Ω' }, { id: -99, name: 'special:term' }],
+      { 'id:1': '/tmp/main.png', 'name:Old': '/tmp/old.webp', 'name:Design Ω': '/tmp/design.jpg' },
+      ['name:Added']
+    ),
+    [
+      { key: 'id:1', label: 'Main', path: '/tmp/main.png', present: true },
+      { key: 'name:Design Ω', label: 'Design Ω', path: '/tmp/design.jpg', present: true },
+      { key: 'name:Old', label: 'Old', path: '/tmp/old.webp', present: false },
+      { key: 'name:Added', label: 'Added', path: '', present: false }
+    ]
+  );
+});
+
+test('picker state ignores stale results and makes cancellation side-effect free', () => {
+  const first = Model.beginPicker(Model.emptyPickerState(), 'id:1');
+  const second = Model.beginPicker(first.state, 'id:2');
+  assert.equal(Model.completePicker(second.state, first.serial, '/tmp/old.png').action, 'stale');
+  assert.equal(Model.completePicker(second.state, second.serial, '').action, 'cancelled');
+  const selected = Model.completePicker(second.state, second.serial, '/tmp/new.png');
+  assert.deepEqual(selected, {
+    action: 'selected',
+    key: 'id:2',
+    path: '/tmp/new.png',
+    state: { serial: second.serial, active: false, targetKey: '' }
+  });
+  assert.equal(Model.completePicker(second.state, second.serial, '/tmp/new.mp4').action, 'invalid');
+});

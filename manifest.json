@@ -7,10 +7,12 @@
   "license": "MIT",
   "description": "Static per-workspace wallpapers for Omarchy.",
   "kinds": [
-    "service"
+    "service",
+    "panel"
   ],
   "entryPoints": {
-    "service": "WorkspaceWallpapers.qml"
+    "service": "WorkspaceWallpapers.qml",
+    "panel": "Settings.qml"
   },
   "omarchy": {
     "clonedFrom": "omarchy.background"

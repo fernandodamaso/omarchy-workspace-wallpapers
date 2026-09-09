@@ -24,6 +24,15 @@ function normalizeWorkspaceKey(value) {
   return ""
 }
 
+function workspaceKeyFromInput(value) {
+  var raw = asString(value)
+  if (!raw) return ""
+  if (raw.indexOf("id:") === 0 || raw.indexOf("name:") === 0)
+    return normalizeWorkspaceKey(raw)
+  if (/^\d+$/.test(raw)) return normalizeWorkspaceKey("id:" + raw)
+  return normalizeWorkspaceKey("name:" + raw)
+}
+
 function workspaceKeyCandidates(workspace) {
   if (!workspace || typeof workspace !== "object") return []
 
@@ -42,6 +51,47 @@ function preferredWorkspaceKey(workspace) {
   return keys.length ? keys[0] : ""
 }
 
+function workspaceLabel(workspace, key) {
+  if (workspace && asString(workspace.name)) return asString(workspace.name)
+  if (key.indexOf("id:") === 0) return "Workspace " + key.substring(3)
+  return key.substring(5)
+}
+
+function composeWorkspaceRows(workspaces, assignments, extraKeys) {
+  var state = parseState(JSON.stringify({ version: 1, assignments: assignments || {} }))
+  var rows = []
+  var seen = {}
+  var list = workspaces || []
+
+  for (var i = 0; i < list.length; i++) {
+    var workspace = list[i]
+    var key = preferredWorkspaceKey(workspace)
+    if (!key || seen[key]) continue
+    var candidates = workspaceKeyCandidates(workspace)
+    for (var c = 0; c < candidates.length; c++) seen[candidates[c]] = true
+    rows.push({
+      key: key,
+      label: workspaceLabel(workspace, key),
+      path: assignmentForWorkspace(state, workspace),
+      present: true
+    })
+  }
+
+  var keys = Object.keys(state.assignments).concat(extraKeys || [])
+  for (var k = 0; k < keys.length; k++) {
+    var normalizedKey = normalizeWorkspaceKey(keys[k])
+    if (!normalizedKey || seen[normalizedKey]) continue
+    seen[normalizedKey] = true
+    rows.push({
+      key: normalizedKey,
+      label: workspaceLabel(null, normalizedKey),
+      path: state.assignments[normalizedKey] || "",
+      present: false
+    })
+  }
+  return rows
+}
+
 function wallpaperWorkspace(currentWorkspace, previousNormalWorkspace) {
   var current = currentWorkspace && typeof currentWorkspace === "object"
     ? currentWorkspace : null
@@ -55,7 +105,7 @@ function wallpaperWorkspace(currentWorkspace, previousNormalWorkspace) {
 
 function normalizeImagePath(value) {
   var path = asString(value)
-  if (!path || path[0] !== "/" || path.indexOf("\0") !== -1) return ""
+  if (!path || path[0] !== "/" || /[\0\r\n\t]/.test(path)) return ""
   if (!/\.(png|jpe?g|webp)$/i.test(path)) return ""
   return path
 }
@@ -212,12 +262,41 @@ function completeRender(state, generation, imagePath, ok) {
   }
 }
 
+function emptyPickerState() {
+  return { serial: 0, active: false, targetKey: "" }
+}
+
+function beginPicker(state, workspaceKey) {
+  var current = state && typeof state === "object" ? state : emptyPickerState()
+  var serial = Number(current.serial)
+  if (!Number.isInteger(serial) || serial < 0) serial = 0
+  return {
+    serial: serial + 1,
+    state: { serial: serial + 1, active: true, targetKey: normalizeWorkspaceKey(workspaceKey) }
+  }
+}
+
+function completePicker(state, serial, imagePath) {
+  var current = state && typeof state === "object" ? state : emptyPickerState()
+  if (!current.active || serial !== current.serial)
+    return { action: "stale", state: current }
+
+  var next = { serial: current.serial, active: false, targetKey: "" }
+  if (!asString(imagePath).trim()) return { action: "cancelled", state: next }
+
+  var path = normalizeImagePath(imagePath)
+  if (!path) return { action: "invalid", state: next }
+  return { action: "selected", key: current.targetKey, path: path, state: next }
+}
+
 if (typeof module !== "undefined") {
   module.exports = {
     isSpecialWorkspaceName: isSpecialWorkspaceName,
     normalizeWorkspaceKey: normalizeWorkspaceKey,
+    workspaceKeyFromInput: workspaceKeyFromInput,
     workspaceKeyCandidates: workspaceKeyCandidates,
     preferredWorkspaceKey: preferredWorkspaceKey,
+    composeWorkspaceRows: composeWorkspaceRows,
     wallpaperWorkspace: wallpaperWorkspace,
     normalizeImagePath: normalizeImagePath,
     emptyState: emptyState,
@@ -229,6 +308,9 @@ if (typeof module !== "undefined") {
     emptyRenderState: emptyRenderState,
     requestRender: requestRender,
     cancelRender: cancelRender,
-    completeRender: completeRender
+    completeRender: completeRender,
+    emptyPickerState: emptyPickerState,
+    beginPicker: beginPicker,
+    completePicker: completePicker
   }
 }

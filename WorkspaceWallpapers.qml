@@ -23,6 +23,20 @@ Item {
   property string pendingAssignmentSource: ""
   property string pendingPickerKey: ""
   property bool pendingReload: false
+  property bool pendingSave: false
+  property var pendingState: null
+  property string pendingOperation: ""
+  property string pendingOperationKey: ""
+  property string pendingOperationPath: ""
+  property string pendingOperationReason: ""
+  property int assignmentRevision: 0
+  readonly property bool mutationBusy: pendingSave || pendingAssignmentKey !== "" || importProc.running
+
+  // In-process completion signal for the plugin's own panel. The identical
+  // payload is also emitted on the workspaceIpc IPC handler below; IPC
+  // signals live on the handler object, so serviceFor() consumers need this
+  // root-level signal to observe completions.
+  signal operationFinished(result: string)
 
   function localFilePath(url) {
     var value = String(url || "")
@@ -42,10 +56,51 @@ Item {
     renderRevision += 1
   }
 
-  function saveState(next) {
-    configState = Model.parseState(JSON.stringify(next))
+  function saveState(next, operation, key, path, reason) {
+    if (pendingSave) {
+      finishOperation(operation, false, key, path, "save-busy")
+      return false
+    }
+    pendingState = Model.parseState(JSON.stringify(next))
+    pendingOperation = String(operation || "")
+    pendingOperationKey = String(key || "")
+    pendingOperationPath = String(path || "")
+    pendingOperationReason = String(reason || "saved")
+    pendingSave = true
+    stateFile.setText(JSON.stringify(pendingState, null, 2) + "\n")
+    return true
+  }
+
+  function commitPendingSave() {
+    if (!pendingSave) return
+    var operation = pendingOperation
+    var key = pendingOperationKey
+    var path = pendingOperationPath
+    var reason = pendingOperationReason
+    configState = pendingState || Model.emptyState()
+    pendingState = null
+    pendingOperation = ""
+    pendingOperationKey = ""
+    pendingOperationPath = ""
+    pendingOperationReason = ""
+    pendingSave = false
+    assignmentRevision += 1
     invalidateRenders()
-    stateFile.setText(JSON.stringify(configState, null, 2) + "\n")
+    finishOperation(operation, true, key, path, reason)
+  }
+
+  function failPendingSave(error) {
+    if (!pendingSave) return
+    var operation = pendingOperation
+    var key = pendingOperationKey
+    var path = pendingOperationPath
+    pendingState = null
+    pendingOperation = ""
+    pendingOperationKey = ""
+    pendingOperationPath = ""
+    pendingOperationReason = ""
+    pendingSave = false
+    finishOperation(operation, false, key, path, "save-failed:" + String(error))
   }
 
   function finishOperation(operation, ok, key, path, reason, data) {
@@ -59,6 +114,7 @@ Item {
     if (data !== undefined && data !== null) result.data = data
     var payload = JSON.stringify(result)
     workspaceIpc.operationFinished(payload)
+    root.operationFinished(payload)
     return payload
   }
 
@@ -69,8 +125,7 @@ Item {
       finishOperation("assign", false, key, path, "invalid-assignment")
       return
     }
-    saveState(Model.withAssignment(configState, key, path))
-    finishOperation("assign", true, key, path, "assigned")
+    saveState(Model.withAssignment(configState, key, path), "assign", key, path, "assigned")
   }
 
   function requestAssignment(workspaceKey, sourcePath) {
@@ -84,8 +139,8 @@ Item {
       finishOperation("assign", false, key, "", "unsupported-image-path")
       return
     }
-    if (importProc.running || pendingAssignmentKey) {
-      finishOperation("assign", false, key, source, "import-busy")
+    if (mutationBusy) {
+      finishOperation("assign", false, key, source, "mutation-busy")
       return
     }
 
@@ -101,13 +156,22 @@ Item {
       finishOperation("clear", false, "", "", "invalid-workspace-key")
       return
     }
+    if (mutationBusy) {
+      finishOperation("clear", false, key, "", "mutation-busy")
+      return
+    }
     var existed = !!configState.assignments[key]
-    saveState(Model.withoutAssignment(configState, key))
-    finishOperation("clear", true, key, "", existed ? "cleared" : "already-clear")
+    saveState(
+      Model.withoutAssignment(configState, key),
+      "clear",
+      key,
+      "",
+      existed ? "cleared" : "already-clear"
+    )
   }
 
   function requestReload() {
-    if (pendingReload) {
+    if (pendingReload || mutationBusy) {
       finishOperation("reload", false, "", "", "reload-busy")
       return
     }
@@ -174,8 +238,10 @@ Item {
     id: stateFile
     path: root.statePath
     watchChanges: true
+    atomicWrites: true
     printErrors: false
     onLoaded: {
+      if (root.pendingSave) return
       root.configState = Model.parseState(text())
       root.invalidateRenders()
       if (root.pendingReload) {
@@ -184,6 +250,7 @@ Item {
       }
     }
     onLoadFailed: {
+      if (root.pendingSave) return
       root.configState = Model.emptyState()
       root.invalidateRenders()
       if (root.pendingReload) {
@@ -191,7 +258,11 @@ Item {
         root.finishOperation("reload", true, "", "", "missing-state-uses-empty")
       }
     }
-    onFileChanged: reload()
+    onSaved: root.commitPendingSave()
+    onSaveFailed: function(error) { root.failPendingSave(error) }
+    onFileChanged: {
+      if (!root.pendingSave) reload()
+    }
   }
 
   Process {
