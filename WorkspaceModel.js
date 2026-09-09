@@ -42,6 +42,17 @@ function preferredWorkspaceKey(workspace) {
   return keys.length ? keys[0] : ""
 }
 
+function wallpaperWorkspace(currentWorkspace, previousNormalWorkspace) {
+  var current = currentWorkspace && typeof currentWorkspace === "object"
+    ? currentWorkspace : null
+  if (current && !isSpecialWorkspaceName(current.name)) return current
+
+  var previous = previousNormalWorkspace && typeof previousNormalWorkspace === "object"
+    ? previousNormalWorkspace : null
+  if (previous && !isSpecialWorkspaceName(previous.name)) return previous
+  return null
+}
+
 function normalizeImagePath(value) {
   var path = asString(value)
   if (!path || path[0] !== "/" || path.indexOf("\0") !== -1) return ""
@@ -110,18 +121,114 @@ function statusPayload(state, fallback, statePath) {
   }
 }
 
+function emptyRenderState() {
+  return {
+    generation: 0,
+    requested: "",
+    fallback: "",
+    displayed: "",
+    displayedGeneration: 0
+  }
+}
+
+function normalizeRenderState(state) {
+  var source = state && typeof state === "object" ? state : emptyRenderState()
+  var generation = Number(source.generation)
+  var displayedGeneration = Number(source.displayedGeneration)
+  return {
+    generation: Number.isInteger(generation) && generation >= 0 ? generation : 0,
+    requested: normalizeImagePath(source.requested),
+    fallback: normalizeImagePath(source.fallback),
+    displayed: normalizeImagePath(source.displayed),
+    displayedGeneration: Number.isInteger(displayedGeneration) && displayedGeneration >= 0
+      ? displayedGeneration : 0
+  }
+}
+
+function requestRender(state, requestedPath, fallbackPath) {
+  var current = normalizeRenderState(state)
+  return {
+    generation: current.generation + 1,
+    requested: normalizeImagePath(requestedPath),
+    fallback: normalizeImagePath(fallbackPath),
+    displayed: current.displayed,
+    displayedGeneration: current.displayedGeneration
+  }
+}
+
+function cancelRender(state) {
+  var current = normalizeRenderState(state)
+  return {
+    generation: current.generation + 1,
+    requested: "",
+    fallback: "",
+    displayed: current.displayed,
+    displayedGeneration: current.displayedGeneration
+  }
+}
+
+function completeRender(state, generation, imagePath, ok) {
+  var current = normalizeRenderState(state)
+  var path = normalizeImagePath(imagePath)
+  if (generation !== current.generation || path !== current.requested) {
+    return { action: "stale", state: current }
+  }
+
+  if (ok === true) {
+    return {
+      action: "display",
+      state: {
+        generation: current.generation,
+        requested: current.requested,
+        fallback: current.fallback,
+        displayed: current.requested,
+        displayedGeneration: current.generation
+      }
+    }
+  }
+
+  if (current.fallback && current.fallback !== current.requested) {
+    return {
+      action: "fallback",
+      state: {
+        generation: current.generation + 1,
+        requested: current.fallback,
+        fallback: "",
+        displayed: current.displayed,
+        displayedGeneration: current.displayedGeneration
+      }
+    }
+  }
+
+  return {
+    action: "clear",
+    state: {
+      generation: current.generation,
+      requested: "",
+      fallback: "",
+      displayed: "",
+      displayedGeneration: current.generation
+    }
+  }
+}
+
 if (typeof module !== "undefined") {
   module.exports = {
     isSpecialWorkspaceName: isSpecialWorkspaceName,
     normalizeWorkspaceKey: normalizeWorkspaceKey,
     workspaceKeyCandidates: workspaceKeyCandidates,
     preferredWorkspaceKey: preferredWorkspaceKey,
+    wallpaperWorkspace: wallpaperWorkspace,
     normalizeImagePath: normalizeImagePath,
     emptyState: emptyState,
     parseState: parseState,
     assignmentForWorkspace: assignmentForWorkspace,
     withAssignment: withAssignment,
     withoutAssignment: withoutAssignment,
-    statusPayload: statusPayload
+    statusPayload: statusPayload,
+    emptyRenderState: emptyRenderState,
+    requestRender: requestRender,
+    cancelRender: cancelRender,
+    completeRender: completeRender
   }
 }

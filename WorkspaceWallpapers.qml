@@ -18,6 +18,7 @@ Item {
   property string currentBackground: ""
   property string displayedBackground: ""
   property int backgroundVersion: 0
+  property int renderRevision: 0
   property string pendingAssignmentKey: ""
   property string pendingAssignmentSource: ""
   property string pendingPickerKey: ""
@@ -37,8 +38,13 @@ Item {
     return Model.preferredWorkspaceKey(workspace)
   }
 
+  function invalidateRenders() {
+    renderRevision += 1
+  }
+
   function saveState(next) {
     configState = Model.parseState(JSON.stringify(next))
+    invalidateRenders()
     stateFile.setText(JSON.stringify(configState, null, 2) + "\n")
   }
 
@@ -126,6 +132,7 @@ Item {
     currentBackground = normalized
     displayedBackground = normalized
     backgroundVersion += 1
+    invalidateRenders()
   }
 
   function transitionNativeBackground(fromPath, path) {
@@ -170,6 +177,7 @@ Item {
     printErrors: false
     onLoaded: {
       root.configState = Model.parseState(text())
+      root.invalidateRenders()
       if (root.pendingReload) {
         root.pendingReload = false
         root.finishOperation("reload", true, "", "", "reloaded")
@@ -177,6 +185,7 @@ Item {
     }
     onLoadFailed: {
       root.configState = Model.emptyState()
+      root.invalidateRenders()
       if (root.pendingReload) {
         root.pendingReload = false
         root.finishOperation("reload", true, "", "", "missing-state-uses-empty")
