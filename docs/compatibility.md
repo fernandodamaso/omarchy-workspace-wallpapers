@@ -16,7 +16,9 @@ Reference inspected on 2026-09-08:
 - `docs/omarchy-shell.md`
 - `bin/omarchy-shell`
 
-The plugin manifest uses schema version 1, id `io.github.fernandodamaso.workspace-wallpapers`, kind `service`, and `omarchy.clonedFrom: "omarchy.background"`.
+The plugin manifest uses schema version 1, id `io.github.fernandodamaso.workspace-wallpapers`, kinds `service` and `panel` (WP-02), and `omarchy.clonedFrom: "omarchy.background"`.
+
+The WP-02 panel (`Settings.qml`) follows the shell's panel contract: the host injects `shell` (the capability-scoped `PluginShellApi`), `manifest` (the public manifest), and `service` (the plugin's own service instance), and drives `open(payloadJson)`/`close()`. The panel reaches its own service through `shell.serviceFor(manifest.id)` and observes completions through the service root's `operationFinished(result)` signal; the identically-payloaded IPC signal on the `workspace-wallpapers` handler remains for CLI clients. Picker directories mirror `omarchy-theme-bg-switcher`: `~/.local/state/omarchy/current/theme/backgrounds` and `~/.config/omarchy/backgrounds/$(cat ~/.local/state/omarchy/current/theme.name)`.
 
 ## Native background compatibility surface
 

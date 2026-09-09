@@ -41,6 +41,18 @@ omarchy-shell workspace-wallpapers clear "id:2"
 
 Assignments are asynchronous because `assign` validates and imports the image first. `operationFinished` reports completion as a single JSON string.
 
+## Native settings panel
+
+Open the panel through the native shell summon path:
+
+```bash
+omarchy-shell shell summon io.github.fernandodamaso.workspace-wallpapers '{}'
+```
+
+The panel lists current normal workspaces and saved assignments whose workspaces are absent. Choose opens `omarchy-menu-images` with the same directories as `omarchy-theme-bg-switcher` — the current theme's backgrounds and `~/.config/omarchy/backgrounds/<theme>` — plus an optional local folder; an absolute PNG, JPEG, or WebP path can also be entered directly. Reset clears only that row. The optional Style-menu entry is documented in [`examples/omarchy-menu.jsonc`](examples/omarchy-menu.jsonc); it is not installed automatically.
+
+The panel owns no assignment file writes: it reads the plugin's scoped service and waits for `operationFinished` before showing a changed mapping. Picker cancellation, unsupported input, failed import, and failed save leave the previous assignment unchanged. Real picker focus, keyboard feel, compositor rendering, and error presentation remain part of the FDM-867 local gate.
+
 ## Headless checks
 
 GitHub CI runs only checks that are meaningful without an Omarchy compositor session:
