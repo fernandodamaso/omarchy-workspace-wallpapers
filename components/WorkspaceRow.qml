@@ -12,8 +12,14 @@ BorderSurface {
   property bool present: false
   property bool busy: false
   property string errorText: ""
+  property string messageText: ""
   property bool undoAvailable: false
   property bool current: false
+
+  function basename(path) {
+    path = String(path || "").replace(/\/+$/, "")
+    return path.substring(path.lastIndexOf("/") + 1)
+  }
 
   signal chooseRequested()
   signal resetRequested()
@@ -26,6 +32,7 @@ BorderSurface {
   implicitHeight: content.implicitHeight + Style.space(20)
   radius: Style.cornerRadius
   color: "transparent"
+  opacity: root.present ? 1.0 : 0.55
   borderSpec: Border.controlSpec("normal", Color.foreground, Color.accent)
 
   ColumnLayout {
@@ -48,7 +55,7 @@ BorderSurface {
 
         Layout.column: 0
         Layout.row: 0
-        Layout.rowSpan: body.columns > 1 ? 2 : 1
+        Layout.rowSpan: 1
         Layout.fillWidth: body.columns === 1
         Layout.preferredWidth: body.columns > 1 ? Style.space(196) : 0
         Layout.minimumWidth: 0
@@ -113,6 +120,18 @@ BorderSurface {
             horizontalAlignment: Text.AlignHCenter
             wrapMode: Text.Wrap
           }
+
+          Text {
+            width: parent.width
+            textFormat: Text.PlainText
+            text: "Drop an image or click to choose"
+            color: Color.foreground
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+            horizontalAlignment: Text.AlignHCenter
+            opacity: 0.6
+            wrapMode: Text.Wrap
+          }
         }
       }
 
@@ -126,7 +145,7 @@ BorderSurface {
         Text {
           Layout.fillWidth: true
           textFormat: Text.PlainText
-          text: root.label + (root.current ? " · Current" : "")
+          text: root.label + (root.current ? " · Current" : (!root.present ? " · not active" : ""))
           color: Color.foreground
           font.family: Style.font.family
           font.pixelSize: Style.font.body
@@ -137,49 +156,48 @@ BorderSurface {
         Text {
           Layout.fillWidth: true
           textFormat: Text.PlainText
-          text: root.busy ? "Saving…" : (root.errorText || (root.imagePath
-            ? "Custom wallpaper" : "Using global background"))
-          color: root.errorText && !root.busy ? Color.urgent : Color.foreground
+          text: root.busy ? "Saving…" : (root.errorText || root.messageText || (root.imagePath
+            ? root.basename(root.imagePath) : "Using global background"))
+          color: root.errorText && !root.busy ? Color.urgent
+            : root.messageText && !root.busy ? Color.accent : Color.foreground
           font.family: Style.font.family
           font.pixelSize: Style.font.caption
-          opacity: root.errorText || root.busy ? 1 : 0.7
+          opacity: root.errorText || root.messageText || root.busy ? 1 : 0.7
           wrapMode: Text.Wrap
         }
-      }
 
-      RowLayout {
-        Layout.column: body.columns > 1 ? 1 : 0
-        Layout.row: body.columns > 1 ? 1 : 2
-        Layout.fillWidth: true
-        spacing: Style.spacing.controlGap
-
-        Button {
+        RowLayout {
           Layout.fillWidth: true
-          Layout.minimumWidth: 0
-          text: root.busy ? "Saving…" : "Change…"
-          bordered: true
-          focusable: true
-          enabled: !root.busy
-          onClicked: root.chooseRequested()
-        }
+          spacing: Style.spacing.controlGap
 
-        Button {
-          Layout.fillWidth: true
-          Layout.minimumWidth: 0
-          text: "Use global background"
-          bordered: true
-          focusable: true
-          enabled: !root.busy && root.imagePath !== ""
-          onClicked: root.resetRequested()
-        }
+          Button {
+            Layout.minimumWidth: 0
+            text: root.busy ? "Saving…" : "Change…"
+            bordered: true
+            focusable: true
+            enabled: !root.busy
+            onClicked: root.chooseRequested()
+          }
 
-        Button {
-          visible: root.undoAvailable
-          text: "Undo"
-          bordered: true
-          focusable: true
-          enabled: !root.busy
-          onClicked: root.undoRequested()
+          Button {
+            Layout.minimumWidth: 0
+            text: "Use global background"
+            bordered: true
+            focusable: true
+            enabled: !root.busy && root.imagePath !== ""
+            onClicked: root.resetRequested()
+          }
+
+          Button {
+            visible: root.undoAvailable
+            text: "Undo"
+            bordered: true
+            focusable: true
+            enabled: !root.busy
+            onClicked: root.undoRequested()
+          }
+
+          Item { Layout.fillWidth: true }
         }
       }
     }

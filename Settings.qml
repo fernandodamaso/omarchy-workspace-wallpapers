@@ -30,22 +30,18 @@ Item {
   property bool sourceSectionOpen: false
   property string sourceTargetKey: ""
   property var sourceTargetOptions: []
-  property bool pathEditorVisible: false
-  property string pathEditorTargetKey: ""
   property string legacyFolderDirectory: ""
   property string pendingFolderDialogTargetKey: ""
   property bool pendingFolderDialogReopen: false
   property bool folderDialogExited: false
   property int folderDialogExitCode: 0
   property bool folderDialogOutputReady: false
-  property string pendingBrowseTargetKey: ""
-  property bool pendingBrowseReopen: false
-  property bool browseDialogExited: false
-  property int browseDialogExitCode: 0
-  property bool browseDialogOutputReady: false
   property string statusMessage: ""
   property bool statusError: false
   property string rowErrorKey: ""
+  property string rowMessageKey: ""
+  property string rowMessage: ""
+  property string addWorkspaceError: ""
 
   readonly property string home: Quickshell.env("HOME")
   readonly property string stateHome: home + "/.local/state"
@@ -97,7 +93,6 @@ Item {
     root.browserOpen = false
     root.browserTargetKey = ""
     root.pendingFolderDialogReopen = false
-    root.pendingBrowseReopen = false
     root.opened = false
   }
 
@@ -105,7 +100,6 @@ Item {
     root.browserOpen = false
     root.browserTargetKey = ""
     root.pendingFolderDialogReopen = false
-    root.pendingBrowseReopen = false
     if (shell && manifest && typeof shell.hide === "function") shell.hide(manifest.id)
     else root.close()
   }
@@ -156,6 +150,10 @@ Item {
 
   function errorFor(key) {
     return root.statusError && root.rowErrorKey === key ? root.statusMessage : ""
+  }
+
+  function rowMessageFor(key) {
+    return root.rowMessageKey === key ? root.rowMessage : ""
   }
 
   function labelForKey(key) {
@@ -293,7 +291,7 @@ Item {
   }
 
   function startFolderDialog() {
-    if (folderDialog.running || browseDialog.running) return
+    if (folderDialog.running) return
     root.folderDialogExited = false
     root.folderDialogOutputReady = false
     root.pendingFolderDialogTargetKey = root.sourceTargetKey
@@ -315,67 +313,6 @@ Item {
     root.pendingFolderDialogReopen = false
     root.restorePanelAfterDialog(reopen)
     if (exitCode === 0 && folder) root.addSourceFolder(folder)
-  }
-
-  function startBrowseDialog() {
-    var key = root.sourceTargetKey
-    if (!key) {
-      root.showError("", "Select a workspace before browsing for an image")
-      return
-    }
-    if (folderDialog.running || browseDialog.running) return
-    root.browseDialogExited = false
-    root.browseDialogOutputReady = false
-    root.pendingBrowseTargetKey = key
-    root.pendingBrowseReopen = root.opened
-    root.clearMessage()
-    root.opened = false
-    browseDialog.running = true
-  }
-
-  function finishBrowseDialog() {
-    if (!root.browseDialogExited || !root.browseDialogOutputReady) return
-    var targetKey = root.pendingBrowseTargetKey
-    var reopen = root.pendingBrowseReopen
-    var path = String(browseDialogStdout.text || "").trim()
-    var exitCode = root.browseDialogExitCode
-    root.browseDialogExited = false
-    root.browseDialogOutputReady = false
-    root.pendingBrowseTargetKey = ""
-    root.pendingBrowseReopen = false
-    root.restorePanelAfterDialog(reopen)
-    if (exitCode === 0 && path) root.assignPath(targetKey, path)
-  }
-
-  function startPathEditor() {
-    if (!root.sourceTargetKey) {
-      root.showError("", "Select a workspace before entering an image path")
-      return
-    }
-    root.pathEditorTargetKey = root.sourceTargetKey
-    root.pathEditorVisible = true
-    pathEditorField.text = ""
-    Qt.callLater(function() {
-      if (root.opened && root.pathEditorVisible) pathEditorField.forceActiveFocus()
-    })
-  }
-
-  function submitPath(path) {
-    var key = root.pathEditorTargetKey
-    root.pathEditorTargetKey = ""
-    root.pathEditorVisible = false
-    root.assignPath(key, path)
-    Qt.callLater(function() {
-      if (root.opened) keyCatcher.forceActiveFocus()
-    })
-  }
-
-  function cancelPathEditor() {
-    root.pathEditorTargetKey = ""
-    root.pathEditorVisible = false
-    Qt.callLater(function() {
-      if (root.opened) keyCatcher.forceActiveFocus()
-    })
   }
 
   function restorePanelAfterDialog(reopen) {
@@ -439,7 +376,7 @@ Item {
   function addWorkspace() {
     var key = Model.workspaceKeyFromInput(addWorkspaceField.text)
     if (!key) {
-      root.showError("", "Enter a positive workspace number or a normal workspace name")
+      root.addWorkspaceError = "Enter a positive workspace number or a normal workspace name"
       return
     }
     var alreadyListed = root.rows.some(function(row) { return row.key === key })
@@ -448,6 +385,7 @@ Item {
       root.refreshRows()
     }
     addWorkspaceField.text = ""
+    root.addWorkspaceError = ""
     root.clearMessage()
   }
 
@@ -458,6 +396,9 @@ Item {
   }
 
   function showError(key, message) {
+    root.rowMessageKey = ""
+    root.rowMessage = ""
+    rowMessageTimer.stop()
     root.rowErrorKey = String(key || "")
     root.statusMessage = String(message || "Operation failed")
     root.statusError = true
@@ -469,6 +410,14 @@ Item {
     if (result.operation === "status") return
     if (result.ok === true) {
       root.clearMessage()
+      if ((result.operation === "assign" || result.operation === "clear"
+          || result.operation === "undo") && String(result.key || "") !== "") {
+        root.rowMessageKey = String(result.key)
+        root.rowMessage = result.operation === "assign" ? "Wallpaper saved"
+          : result.operation === "clear" ? "Using global background"
+          : "Change undone"
+        rowMessageTimer.restart()
+      }
       root.statusMessage = result.operation === "clear" ? "Using global background"
         : result.operation === "undo" ? "Wallpaper change undone"
         : result.operation === "reload" ? "Wallpaper reloaded"
@@ -513,31 +462,17 @@ Item {
   }
 
   Process {
-    id: browseDialog
-    command: [
-      "zenity", "--file-selection",
-      "--file-filter=Static images | *.png *.jpg *.jpeg *.webp"
-    ]
-
-    stdout: StdioCollector {
-      id: browseDialogStdout
-      waitForEnd: true
-      onStreamFinished: {
-        root.browseDialogOutputReady = true
-        root.finishBrowseDialog()
-      }
-    }
-
-    onExited: function(exitCode) {
-      root.browseDialogExitCode = exitCode
-      root.browseDialogExited = true
-      root.finishBrowseDialog()
-    }
-  }
-
-  Process {
     id: sourceFolderOpenProcess
     command: []
+  }
+
+  Timer {
+    id: rowMessageTimer
+    interval: 3000
+    onTriggered: {
+      root.rowMessageKey = ""
+      root.rowMessage = ""
+    }
   }
 
   Connections {
@@ -637,6 +572,14 @@ Item {
               font.pixelSize: Style.font.title
               font.bold: true
             }
+            Text {
+              text: "Esc to close"
+              color: Color.foreground
+              opacity: 0.6
+              font.family: Style.font.family
+              font.pixelSize: Style.font.caption
+              textFormat: Text.PlainText
+            }
             Button {
               text: "Close"
               bordered: true
@@ -657,167 +600,117 @@ Item {
           }
 
           Button {
-            text: "Image sources…"
+            text: "Wallpaper folders…"
             selected: root.sourceSectionOpen
             bordered: true
             focusable: true
             onClicked: root.sourceSectionOpen = !root.sourceSectionOpen
           }
 
-          ColumnLayout {
-            id: sourceSection
+          BorderSurface {
+            id: sourceSectionPanel
             visible: root.sourceSectionOpen
             Layout.fillWidth: true
-            spacing: Style.spacing.controlGap
+            implicitHeight: sourceSection.implicitHeight + contentTopInset + contentBottomInset
+            color: Color.background
+            radius: Style.cornerRadius
+            borderSpec: Border.controlSpec("normal", Color.foreground, Color.accent)
+            padding: Style.spacing.md
 
-            Dropdown {
-              id: sourceDropdown
-              Layout.fillWidth: true
-              Layout.minimumWidth: 0
-              label: "Browse from"
-              value: root.sourceSelection
-              options: root.sourceOptions
-              enabled: !root.sourcePreferencesPending
-              onChanged: root.setSourceSelection(value)
-            }
-
-            Dropdown {
-              id: sourceTargetDropdown
-              Layout.fillWidth: true
-              Layout.minimumWidth: 0
-              label: "Apply file to"
-              value: root.sourceTargetKey
-              options: root.sourceTargetOptions
-              enabled: root.sourceTargetOptions.length > 0
-              onChanged: root.sourceTargetKey = value
-            }
-
-            Flow {
-              Layout.fillWidth: true
+            ColumnLayout {
+              id: sourceSection
+              visible: root.sourceSectionOpen
+              anchors.left: parent.left
+              anchors.right: parent.right
+              anchors.top: parent.top
+              anchors.bottom: parent.bottom
+              anchors.leftMargin: sourceSectionPanel.contentLeftInset
+              anchors.rightMargin: sourceSectionPanel.contentRightInset
+              anchors.topMargin: sourceSectionPanel.contentTopInset
+              anchors.bottomMargin: sourceSectionPanel.contentBottomInset
               spacing: Style.spacing.controlGap
 
-              Button {
-                text: "Browse files…"
-                bordered: true
-                focusable: true
-                enabled: root.sourceTargetKey !== ""
-                onClicked: root.startBrowseDialog()
-              }
-
-              Button {
-                text: "Enter image path…"
-                bordered: true
-                focusable: true
-                enabled: root.sourceTargetKey !== ""
-                onClicked: root.startPathEditor()
-              }
-            }
-
-            RowLayout {
-              visible: root.pathEditorVisible
-              Layout.fillWidth: true
-
-              TextField {
-                id: pathEditorField
+              Dropdown {
+                id: sourceDropdown
                 Layout.fillWidth: true
                 Layout.minimumWidth: 0
-                placeholderText: "Absolute image path"
-                onAccepted: root.submitPath(text)
+                label: "Default source for picker"
+                value: root.sourceSelection
+                options: root.sourceOptions
+                enabled: !root.sourcePreferencesPending
+                onChanged: root.setSourceSelection(value)
+              }
+
+              Text {
+                Layout.fillWidth: true
+                textFormat: Text.PlainText
+                text: "Saved folders"
+                color: Color.foreground
+                font.family: Style.font.family
+                font.pixelSize: Style.font.caption
+                font.bold: true
+              }
+
+              Text {
+                Layout.fillWidth: true
+                visible: root.sourcePreferences.folders.length === 0
+                text: "No saved folders"
+                color: Color.foreground
+                font.family: Style.font.family
+                font.pixelSize: Style.font.caption
+                opacity: 0.7
+              }
+
+              ListView {
+                id: sourceFolderList
+                Layout.fillWidth: true
+                Layout.preferredHeight: Math.min(Style.space(160), contentHeight)
+                visible: count > 0
+                clip: true
+                spacing: Style.spacing.xs
+                model: root.sourcePreferences.folders
+
+                delegate: RowLayout {
+                  width: sourceFolderList.width
+                  spacing: Style.spacing.controlGap
+
+                  Button {
+                    Layout.fillWidth: true
+                    Layout.minimumWidth: 0
+                    text: root.basename(modelData)
+                    tooltipText: String(modelData)
+                    leftAlign: true
+                    bordered: true
+                    focusable: true
+                    clip: true
+                  }
+
+                  Button {
+                    text: "Open in Files"
+                    tooltipText: "Open " + String(modelData) + " in Files"
+                    bordered: true
+                    focusable: true
+                    onClicked: root.openSourceFolder(modelData)
+                  }
+
+                  Button {
+                    text: "Remove"
+                    tooltipText: "Remove " + String(modelData)
+                    bordered: true
+                    focusable: true
+                    enabled: !root.sourcePreferencesPending
+                    onClicked: root.removeSourceFolder(modelData)
+                  }
+                }
               }
 
               Button {
-                text: "Cancel"
+                text: "Add folder…"
                 bordered: true
                 focusable: true
-                onClicked: root.cancelPathEditor()
+                enabled: !root.sourcePreferencesPending
+                onClicked: root.startFolderDialog()
               }
-            }
-
-            Text {
-              Layout.fillWidth: true
-              textFormat: Text.PlainText
-              text: "Saved folders"
-              color: Color.foreground
-              font.family: Style.font.family
-              font.pixelSize: Style.font.caption
-              font.bold: true
-            }
-
-            Text {
-              Layout.fillWidth: true
-              visible: root.sourcePreferences.folders.length === 0
-              text: "No saved folders"
-              color: Color.foreground
-              font.family: Style.font.family
-              font.pixelSize: Style.font.caption
-              opacity: 0.7
-            }
-
-            ListView {
-              id: sourceFolderList
-              Layout.fillWidth: true
-              Layout.preferredHeight: Math.min(Style.space(160), contentHeight)
-              visible: count > 0
-              clip: true
-              spacing: Style.spacing.xs
-              model: root.sourcePreferences.folders
-
-              delegate: RowLayout {
-                width: sourceFolderList.width
-                spacing: Style.spacing.controlGap
-
-                Button {
-                  Layout.fillWidth: true
-                  Layout.minimumWidth: 0
-                  text: root.basename(modelData)
-                  tooltipText: String(modelData)
-                  leftAlign: true
-                  bordered: true
-                  focusable: true
-                  clip: true
-                }
-
-                Button {
-                  text: "Open in Files"
-                  tooltipText: "Open " + String(modelData) + " in Files"
-                  bordered: true
-                  focusable: true
-                  onClicked: root.openSourceFolder(modelData)
-                }
-
-                Button {
-                  text: "Remove"
-                  tooltipText: "Remove " + String(modelData)
-                  bordered: true
-                  focusable: true
-                  enabled: !root.sourcePreferencesPending
-                  onClicked: root.removeSourceFolder(modelData)
-                }
-              }
-            }
-
-            Button {
-              text: "Add folder…"
-              bordered: true
-              focusable: true
-              enabled: !root.sourcePreferencesPending
-              onClicked: root.startFolderDialog()
-            }
-          }
-
-          RowLayout {
-            Layout.fillWidth: true
-            TextField {
-              id: addWorkspaceField
-              Layout.fillWidth: true
-              placeholderText: "Add workspace number or exact name"
-              onAccepted: root.addWorkspace()
-            }
-            Button {
-              text: "Add workspace"
-              bordered: true
-              focusable: true
-              onClicked: root.addWorkspace()
             }
           }
 
@@ -847,6 +740,7 @@ Item {
               present: modelData.present
               busy: root.isBusy()
               errorText: root.errorFor(modelData.key)
+              messageText: root.rowMessageFor(modelData.key)
               undoAvailable: root.undoAvailable(modelData.key)
               current: root.isCurrentWorkspace(modelData.key)
               onChooseRequested: root.choose(workspaceKey)
@@ -856,6 +750,34 @@ Item {
               onImageDropped: function(path) { root.assignPath(workspaceKey, path) }
               onDropRejected: function(reason) { root.showError(workspaceKey, reason) }
             }
+          }
+
+          RowLayout {
+            Layout.fillWidth: true
+            TextField {
+              id: addWorkspaceField
+              Layout.fillWidth: true
+              placeholderText: "Add workspace number or exact name"
+              onTextChanged: root.addWorkspaceError = ""
+              onAccepted: root.addWorkspace()
+            }
+            Button {
+              text: "Add workspace"
+              bordered: true
+              focusable: true
+              onClicked: root.addWorkspace()
+            }
+          }
+
+          Text {
+            Layout.fillWidth: true
+            visible: root.addWorkspaceError !== ""
+            text: root.addWorkspaceError
+            color: Color.urgent
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+            textFormat: Text.PlainText
+            wrapMode: Text.Wrap
           }
           }
         }
