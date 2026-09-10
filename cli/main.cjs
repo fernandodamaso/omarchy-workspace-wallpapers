@@ -88,9 +88,11 @@ async function main(argv = process.argv.slice(2), env = process.env) {
     return 0;
   } catch (error) {
     const result = errorEnvelope(command, requestId, error);
+    const exitCode = result.phase === 'unknown' ? 5 : (Number.isInteger(error.exitCode) ? error.exitCode : 6);
+    if (result.phase === 'unknown') result.data = { ...result.data, exitCode: 5, retrySafe: false };
     if (json) process.stdout.write(JSON.stringify(result) + '\n');
     process.stderr.write(result.code + ': ' + result.message + '\n');
-    return Number.isInteger(error.exitCode) ? error.exitCode : 6;
+    return exitCode;
   }
 }
 module.exports = { HELP, parseArgs, execute, main };
