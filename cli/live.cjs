@@ -42,7 +42,7 @@ function checkedResult(value, request) {
     throw unknown('completion-unknown', 'The response belongs to another request/session or is malformed. Inspect status before retrying.');
   if (!value.ok) {
     const code = [2, 3, 4, 5, 6].includes(value.data.exitCode) ? value.data.exitCode : 6;
-    if (value.phase === 'unknown') throw Object.assign(failure(value.code, value.message, code, { ...value.data, retrySafe: false }), { phase: 'unknown' });
+    if (value.phase === 'unknown') throw Object.assign(failure(value.code, value.message, 5, { ...value.data, exitCode: 5, retrySafe: false }), { phase: 'unknown' });
     throw failure(value.code, value.message, code, value.data);
   }
   if (value.phase === 'accepted') return value;
