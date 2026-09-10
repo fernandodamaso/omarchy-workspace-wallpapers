@@ -43,6 +43,202 @@ test('only absolute PNG JPEG and WebP paths are accepted', () => {
   assert.equal(Model.normalizeImagePath('https://example.com/test.png'), '');
 });
 
+test('history parsing tolerates malformed input and filters entries', () => {
+  const empty = { version: 1, recent: [], undo: null };
+  assert.deepEqual(Model.emptyHistoryState(), empty);
+  assert.deepEqual(Model.parseHistoryState('{not json'), empty);
+  assert.deepEqual(Model.parseHistoryState(JSON.stringify({ version: 2 })), empty);
+
+  assert.deepEqual(
+    Model.parseHistoryState({
+      version: 1,
+      recent: [
+        { path: '/wallpapers/one.png', name: 'One', usedAt: 10 },
+        { path: '/wallpapers/one.png', name: 'Older One', usedAt: 9 },
+        { path: 'relative/two.jpg', name: 'Two', usedAt: 9 },
+        { path: '/wallpapers/three.gif', name: 'Three', usedAt: 8 },
+        { path: '/wallpapers/missing-name.webp', usedAt: 7 },
+        null,
+        { path: '/wallpapers/four.jpeg', name: 'Four', usedAt: 'bad' }
+      ],
+      undo: { key: 'id:4', previousPath: '', revision: 3 }
+    }),
+    {
+      version: 1,
+      recent: [{ path: '/wallpapers/one.png', name: 'One', usedAt: 10 }],
+      undo: { key: 'id:4', previousPath: '', revision: 3 }
+    }
+  );
+});
+
+test('recent history is newest first, deduplicated, and bounded', () => {
+  const original = {
+    version: 1,
+    recent: [
+      { path: '/wallpapers/old.png', name: 'Old', usedAt: 1 },
+      { path: '/wallpapers/keep.jpg', name: 'Keep', usedAt: 2 },
+      { path: '/wallpapers/duplicate.webp', name: 'Duplicate', usedAt: 3 }
+    ],
+    undo: null
+  };
+
+  const updated = Model.recordRecent(
+    original,
+    '/wallpapers/keep.jpg',
+    'Keep again',
+    4,
+    2
+  );
+
+  assert.deepEqual(updated.recent, [
+    { path: '/wallpapers/keep.jpg', name: 'Keep again', usedAt: 4 },
+    { path: '/wallpapers/old.png', name: 'Old', usedAt: 1 }
+  ]);
+  assert.deepEqual(original.recent, [
+    { path: '/wallpapers/old.png', name: 'Old', usedAt: 1 },
+    { path: '/wallpapers/keep.jpg', name: 'Keep', usedAt: 2 },
+    { path: '/wallpapers/duplicate.webp', name: 'Duplicate', usedAt: 3 }
+  ]);
+});
+
+test('undo history supports global fallback and rejects stale candidates', () => {
+  const original = Model.emptyHistoryState();
+  const recorded = Model.recordUndo(original, 'id:7', '', 12);
+
+  assert.deepEqual(recorded.undo, { key: 'id:7', previousPath: '', revision: 12 });
+  assert.deepEqual(Model.undoCandidate(recorded, 'id:7', 12), {
+    action: 'available',
+    path: ''
+  });
+  assert.deepEqual(Model.undoCandidate(recorded, 'id:8', 12), { action: 'stale' });
+  assert.deepEqual(Model.undoCandidate(recorded, 'id:7', 13), { action: 'stale' });
+  assert.deepEqual(original, Model.emptyHistoryState());
+});
+
+test('history mutations are immutable and clear only undo', () => {
+  const original = {
+    version: 1,
+    recent: [{ path: '/wallpapers/one.png', name: 'One', usedAt: 1 }],
+    undo: { key: 'name:Main', previousPath: '/wallpapers/old.jpg', revision: 2 }
+  };
+  const cleared = Model.clearUndo(original);
+
+  assert.deepEqual(cleared, {
+    version: 1,
+    recent: [{ path: '/wallpapers/one.png', name: 'One', usedAt: 1 }],
+    undo: null
+  });
+  assert.deepEqual(original.undo, {
+    key: 'name:Main',
+    previousPath: '/wallpapers/old.jpg',
+    revision: 2
+  });
+
+  const recent = Model.recordRecent(original, '/wallpapers/new.webp', 'New', 3);
+  recent.recent[0].name = 'Changed';
+  assert.equal(original.recent[0].name, 'One');
+  assert.equal(original.undo.previousPath, '/wallpapers/old.jpg');
+});
+
+test('source preferences tolerate malformed and version-mismatched input', () => {
+  const empty = {
+    version: 1,
+    folders: [],
+    lastSource: 'theme',
+    sort: 'name',
+    thumbnailSize: 'medium'
+  };
+
+  assert.deepEqual(Model.emptySourcePreferences(), empty);
+  assert.deepEqual(Model.parseSourcePreferences('{not json'), empty);
+  assert.deepEqual(Model.parseSourcePreferences(JSON.stringify({ version: 2 })), empty);
+  assert.deepEqual(Model.parseSourcePreferences(JSON.stringify(null)), empty);
+});
+
+test('source preferences preserve valid unavailable folders and deduplicate in input order', () => {
+  const folders = [
+    '/unavailable/Shared Folder',
+    '/unavailable/東京 wallpapers',
+    '/unavailable/Shared Folder',
+    'relative/folder',
+    '/unavailable/東京 wallpapers',
+    '/unavailable/with\t tab'
+  ];
+
+  assert.deepEqual(
+    Model.parseSourcePreferences(JSON.stringify({ version: 1, folders: folders })),
+    {
+      version: 1,
+      folders: ['/unavailable/Shared Folder', '/unavailable/東京 wallpapers'],
+      lastSource: 'theme',
+      sort: 'name',
+      thumbnailSize: 'medium'
+    }
+  );
+});
+
+test('source preference options ignore invalid values', () => {
+  const parsed = Model.parseSourcePreferences(JSON.stringify({
+    version: 1,
+    lastSource: 'elsewhere',
+    sort: 'recent',
+    thumbnailSize: 'huge'
+  }));
+
+  assert.equal(parsed.lastSource, 'theme');
+  assert.equal(parsed.sort, 'name');
+  assert.equal(parsed.thumbnailSize, 'medium');
+
+  const updated = Model.updateSourcePreferences(parsed, {
+    lastSource: 'recent',
+    sort: 'mtime',
+    thumbnailSize: 'large'
+  });
+  assert.equal(updated.lastSource, 'recent');
+  assert.equal(updated.sort, 'mtime');
+  assert.equal(updated.thumbnailSize, 'large');
+});
+
+test('source folder mutations are pure and validate absolute paths', () => {
+  const original = Model.emptySourcePreferences();
+  const added = Model.addSourceFolder(original, '/unavailable/Folder Ω');
+  const duplicate = Model.addSourceFolder(added, '/unavailable/Folder Ω');
+  const invalid = Model.addSourceFolder(duplicate, 'relative/folder');
+  const removed = Model.removeSourceFolder(invalid, '/unavailable/Folder Ω');
+
+  assert.deepEqual(original.folders, []);
+  assert.deepEqual(added.folders, ['/unavailable/Folder Ω']);
+  assert.deepEqual(duplicate.folders, ['/unavailable/Folder Ω']);
+  assert.deepEqual(invalid.folders, ['/unavailable/Folder Ω']);
+  assert.deepEqual(removed.folders, []);
+});
+
+test('source directories preserve theme-then-folder ordering and remove duplicates', () => {
+  const preferences = {
+    version: 1,
+    folders: ['/unavailable/Folder Ω', '/theme/one', '/unavailable/Folder Ω'],
+    lastSource: 'folders',
+    sort: 'name',
+    thumbnailSize: 'medium'
+  };
+  const themes = ['/theme/one', '/theme/東京', 'relative/theme', '/theme/東京'];
+
+  assert.deepEqual(Model.sourceDirectories(preferences, 'theme', themes), [
+    '/theme/one',
+    '/theme/東京'
+  ]);
+  assert.deepEqual(Model.sourceDirectories(preferences, 'folders', themes), [
+    '/unavailable/Folder Ω',
+    '/theme/one'
+  ]);
+  assert.deepEqual(Model.sourceDirectories(preferences, 'all', themes), [
+    '/theme/one',
+    '/theme/東京',
+    '/unavailable/Folder Ω'
+  ]);
+  assert.deepEqual(Model.sourceDirectories(preferences, 'unknown', themes), []);
+});
+
 test('state parsing keeps only valid workspace/image assignments', () => {
   const parsed = Model.parseState(JSON.stringify({
     version: 1,

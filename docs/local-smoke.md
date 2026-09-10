@@ -160,7 +160,30 @@ If more qualification is needed afterward:
 omarchy plugin enable io.github.fernandodamaso.workspace-wallpapers
 ```
 
-## 6. FDM-864 evidence to capture
+## 6. WP-02 visual browser checks
+
+With the plugin enabled, summon the panel from the shell IPC surface:
+
+```bash
+omarchy-shell shell summon io.github.fernandodamaso.workspace-wallpapers '{}'
+```
+
+Expected observations:
+
+- The panel opens with workspace cards showing previews, friendly workspace labels, `Change…`, and `Use global background`; managed filesystem paths are not shown in the cards.
+- `Change…` opens the visual browser for the workspace that was clicked, with theme thumbnails, filename search, name/modification-time sorting, thumbnail sizing, a larger crop preview, and `Use this wallpaper` plus `Cancel` actions.
+- `Image sources…` exposes Current theme, My folders, Recently used, and All sources. `Add folder…` and `Browse files…` use graphical dialogs; saved folders have `Open in Files` and `Remove` actions.
+- Cancelling the browser returns to the settings panel without changing assignments. Selecting `Use this wallpaper` closes the browser before the service save completes and reports any failure in the workspace row.
+- Dropping a folder into the browser adds it as a saved source; dropping a supported static image onto a workspace row starts an assignment without exposing its managed destination path.
+- After a successful change or clear, `Undo` is offered for that workspace. A workspace change or a second mutation makes the prior Undo unavailable.
+
+Close the panel after the visual checks:
+
+```bash
+omarchy-shell shell hide io.github.fernandodamaso.workspace-wallpapers
+```
+
+## 7. FDM-864 evidence to capture
 
 Record:
 

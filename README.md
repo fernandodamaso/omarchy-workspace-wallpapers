@@ -15,7 +15,8 @@ Native per-workspace static wallpapers for Omarchy Quattro.
 - Invalidates renderer generations on state reload and background refresh so same-path replacements can be decoded again.
 - Imports assigned images into `${XDG_DATA_HOME:-$HOME/.local/share}/omarchy/workspace-wallpapers/images` after MIME validation.
 - Persists assignments in `~/.config/omarchy/workspace-wallpapers/assignments.json`.
-- Exposes `workspace-wallpapers` IPC operations: `assign`, `clear`, `reload`, `status`, plus the `operationFinished(string)` completion signal.
+- Persists image-source preferences separately in `~/.config/omarchy/workspace-wallpapers/preferences.json` and recent/Undo history in `history.json`.
+- Exposes `workspace-wallpapers` IPC operations: `assign`, `clear`, `undo`, `reload`, `status`, plus the `operationFinished(string)` completion signal.
 
 ## Install
 
@@ -49,7 +50,11 @@ Open the panel through the native shell summon path:
 omarchy-shell shell summon io.github.fernandodamaso.workspace-wallpapers '{}'
 ```
 
-The panel lists current normal workspaces and saved assignments whose workspaces are absent. Choose opens `omarchy-menu-images` with the same directories as `omarchy-theme-bg-switcher` — the current theme's backgrounds and `~/.config/omarchy/backgrounds/<theme>` — plus an optional local folder; an absolute PNG, JPEG, or WebP path can also be entered directly. Reset clears only that row. The optional Style-menu entry is documented in [`examples/omarchy-menu.jsonc`](examples/omarchy-menu.jsonc); it is not installed automatically.
+The panel lists current normal workspaces and saved assignments whose workspaces are absent. Each row has a clickable 16:9 preview and a `Change…` action. Change opens a visual browser for the captured workspace with thumbnail previews, filename search, name or modification-time sorting, adjustable thumbnail size, a larger crop preview, and an explicit `Use this wallpaper` confirmation. Sources include the current theme, saved folders, recently used images, and all sources. The browser also accepts a dropped folder; a workspace row accepts a single dropped PNG, JPEG, or WebP image.
+
+`Image sources…` manages remembered folders without requiring path entry. `Add folder…` and `Browse files…` use `zenity` graphical dialogs; `Open in Files` uses `xdg-open`. The full folder path is available as a tooltip, while the main list uses friendly folder names. `Enter image path…` remains available as a secondary fallback. Use `Use global background` to clear an assignment, and `Undo` to restore the previous explicit assignment or global fallback when the workspace has not changed again. The optional Style-menu entry is documented in [`examples/omarchy-menu.jsonc`](examples/omarchy-menu.jsonc); it is not installed automatically.
+
+The graphical file and folder actions require `zenity`; the thumbnail browser itself does not. The panel owns no assignment or preference file writes directly: it calls the plugin service and waits for atomic save completion.
 
 The panel owns no assignment file writes: it reads the plugin's scoped service and waits for `operationFinished` before showing a changed mapping. Picker cancellation, unsupported input, failed import, and failed save leave the previous assignment unchanged. Real picker focus, keyboard feel, compositor rendering, and error presentation remain part of the FDM-867 local gate.
 

@@ -67,6 +67,30 @@ test('WP-02 panel uses the scoped service and native picker contracts', () => {
   assert.match(row, /signal\s+resetRequested/);
 });
 
+test('workspace wallpaper panel exposes visual source browsing and stable target wiring', () => {
+  const settings = read('Settings.qml');
+  const browser = read('WallpaperBrowser.qml');
+  const row = read('components/WorkspaceRow.qml');
+  const service = read('WorkspaceWallpapers.qml');
+
+  assert.match(settings, /WallpaperBrowser\s*\{/);
+  assert.match(settings, /browserTargetKey/);
+  assert.match(settings, /onThumbnailSizeChangedByUser/);
+  assert.match(settings, /zenity.*file-selection/);
+  assert.match(settings, /xdg-open/);
+  assert.match(settings, /Recently used/);
+  assert.match(browser, /signal\s+selected\(path:\s*string\)/);
+  assert.match(browser, /signal\s+sortChanged\(value:\s*string\)/);
+  assert.match(browser, /Use this wallpaper/);
+  assert.match(browser, /processSerial/);
+  assert.match(browser, /onStreamFinished/);
+  assert.match(row, /DropArea\s*\{/);
+  assert.match(row, /signal\s+undoRequested/);
+  assert.match(service, /preferences\.json/);
+  assert.match(service, /history\.json/);
+  assert.match(service, /stateReady/);
+});
+
 test('WP-02 optional menu example is an inert documented entry', () => {
   const example = read('examples/omarchy-menu.jsonc');
   assert.match(example, /Workspace Wallpapers/);

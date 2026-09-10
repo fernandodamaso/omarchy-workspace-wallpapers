@@ -110,6 +110,225 @@ function normalizeImagePath(value) {
   return path
 }
 
+function emptyHistoryState() {
+  return { version: 1, recent: [], undo: null }
+}
+
+function normalizeHistoryUsedAt(value) {
+  if (value === undefined || value === null || asString(value).trim() === "") return null
+  var usedAt = Number(value)
+  return Number.isFinite(usedAt) && usedAt >= 0 ? usedAt : null
+}
+
+function normalizeHistoryRevision(value) {
+  if (value === undefined || value === null || asString(value).trim() === "") return null
+  var revision = Number(value)
+  return Number.isInteger(revision) && revision >= 0 ? revision : null
+}
+
+function normalizeHistoryEntry(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null
+
+  var path = normalizeImagePath(value.path)
+  var usedAt = normalizeHistoryUsedAt(value.usedAt)
+  if (!path || typeof value.name !== "string" || !value.name || usedAt === null)
+    return null
+
+  return { path: path, name: value.name, usedAt: usedAt }
+}
+
+function normalizeHistoryUndo(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null
+
+  var key = normalizeWorkspaceKey(value.key)
+  var previousPath = value.previousPath === ""
+    ? "" : normalizeImagePath(value.previousPath)
+  var revision = normalizeHistoryRevision(value.revision)
+  if (!key || (value.previousPath !== "" && !previousPath) || revision === null)
+    return null
+
+  return { key: key, previousPath: previousPath, revision: revision }
+}
+
+function parseHistoryState(raw) {
+  var parsed
+  try {
+    parsed = typeof raw === "string" ? JSON.parse(raw) : raw
+  } catch (error) {
+    return emptyHistoryState()
+  }
+
+  if (!parsed || typeof parsed !== "object" || parsed.version !== 1)
+    return emptyHistoryState()
+
+  var recent = []
+  var seenRecent = {}
+  if (Array.isArray(parsed.recent)) {
+    for (var i = 0; i < parsed.recent.length; i++) {
+      var entry = normalizeHistoryEntry(parsed.recent[i])
+      if (entry && !seenRecent[entry.path] && recent.length < 20) {
+        seenRecent[entry.path] = true
+        recent.push(entry)
+      }
+    }
+  }
+
+  return {
+    version: 1,
+    recent: recent,
+    undo: normalizeHistoryUndo(parsed.undo)
+  }
+}
+
+function recordRecent(state, path, name, usedAt, maxEntries) {
+  var next = parseHistoryState(state)
+  var entry = normalizeHistoryEntry({ path: path, name: name, usedAt: usedAt })
+  if (!entry) return next
+
+  var limit = maxEntries === undefined ? 20 : Number(maxEntries)
+  if (!Number.isFinite(limit) || limit < 0) limit = 20
+  limit = Math.floor(limit)
+
+  var recent = [entry]
+  for (var i = 0; i < next.recent.length; i++) {
+    if (next.recent[i].path !== entry.path) recent.push(next.recent[i])
+  }
+  next.recent = recent.slice(0, limit)
+  return next
+}
+
+function recordUndo(state, key, previousPath, revision) {
+  var next = parseHistoryState(state)
+  var undo = normalizeHistoryUndo({
+    key: key,
+    previousPath: previousPath,
+    revision: revision
+  })
+  if (undo) next.undo = undo
+  return next
+}
+
+function undoCandidate(state, key, currentRevision) {
+  var next = parseHistoryState(state)
+  var normalizedKey = normalizeWorkspaceKey(key)
+  var revision = normalizeHistoryRevision(currentRevision)
+  if (!next.undo || !normalizedKey || revision === null ||
+      next.undo.key !== normalizedKey || next.undo.revision !== revision)
+    return { action: "stale" }
+  return { action: "available", path: next.undo.previousPath }
+}
+
+function clearUndo(state) {
+  var next = parseHistoryState(state)
+  next.undo = null
+  return next
+}
+
+function emptySourcePreferences() {
+  return {
+    version: 1,
+    folders: [],
+    lastSource: "theme",
+    sort: "name",
+    thumbnailSize: "medium"
+  }
+}
+
+function normalizeSourceFolder(value) {
+  var folder = asString(value)
+  if (!folder || folder[0] !== "/" || /[\0\r\n\t]/.test(folder)) return ""
+  return folder
+}
+
+function uniqueSourceFolders(value) {
+  var folders = []
+  if (!Array.isArray(value)) return folders
+
+  for (var i = 0; i < value.length; i++) {
+    var folder = normalizeSourceFolder(value[i])
+    if (folder && folders.indexOf(folder) === -1) folders.push(folder)
+  }
+  return folders
+}
+
+function isValidSource(value) {
+  return value === "theme" || value === "folders" || value === "recent" || value === "all"
+}
+
+function isValidSort(value) {
+  return value === "name" || value === "mtime"
+}
+
+function isValidThumbnailSize(value) {
+  return value === "small" || value === "medium" || value === "large"
+}
+
+function parseSourcePreferences(raw) {
+  var parsed
+  try {
+    parsed = typeof raw === "string" ? JSON.parse(raw) : raw
+  } catch (error) {
+    return emptySourcePreferences()
+  }
+
+  if (!parsed || typeof parsed !== "object" || parsed.version !== 1)
+    return emptySourcePreferences()
+
+  var preferences = emptySourcePreferences()
+  preferences.folders = uniqueSourceFolders(parsed.folders)
+  if (isValidSource(parsed.lastSource)) preferences.lastSource = parsed.lastSource
+  if (isValidSort(parsed.sort)) preferences.sort = parsed.sort
+  if (isValidThumbnailSize(parsed.thumbnailSize))
+    preferences.thumbnailSize = parsed.thumbnailSize
+  return preferences
+}
+
+function addSourceFolder(preferences, folder) {
+  var next = parseSourcePreferences(preferences)
+  var normalized = normalizeSourceFolder(folder)
+  if (normalized && next.folders.indexOf(normalized) === -1)
+    next.folders.push(normalized)
+  return next
+}
+
+function removeSourceFolder(preferences, folder) {
+  var next = parseSourcePreferences(preferences)
+  var normalized = normalizeSourceFolder(folder)
+  if (!normalized) return next
+  next.folders = next.folders.filter(function(item) { return item !== normalized })
+  return next
+}
+
+function updateSourcePreferences(preferences, updates) {
+  var next = parseSourcePreferences(preferences)
+  if (!updates || typeof updates !== "object") return next
+
+  if (isValidSource(updates.lastSource)) next.lastSource = updates.lastSource
+  if (isValidSort(updates.sort)) next.sort = updates.sort
+  if (isValidThumbnailSize(updates.thumbnailSize))
+    next.thumbnailSize = updates.thumbnailSize
+  if (Array.isArray(updates.folders)) next.folders = uniqueSourceFolders(updates.folders)
+  return next
+}
+
+function sourceDirectories(preferences, source, themeDirectories) {
+  var normalized = parseSourcePreferences(preferences)
+  var directories = []
+
+  function append(values) {
+    if (!Array.isArray(values)) return
+    for (var i = 0; i < values.length; i++) {
+      var directory = normalizeSourceFolder(values[i])
+      if (directory && directories.indexOf(directory) === -1)
+        directories.push(directory)
+    }
+  }
+
+  if (source === "theme" || source === "all") append(themeDirectories)
+  if (source === "folders" || source === "all") append(normalized.folders)
+  return directories
+}
+
 function emptyState() {
   return { version: 1, assignments: {} }
 }
@@ -299,6 +518,18 @@ if (typeof module !== "undefined") {
     composeWorkspaceRows: composeWorkspaceRows,
     wallpaperWorkspace: wallpaperWorkspace,
     normalizeImagePath: normalizeImagePath,
+    emptyHistoryState: emptyHistoryState,
+    parseHistoryState: parseHistoryState,
+    recordRecent: recordRecent,
+    recordUndo: recordUndo,
+    undoCandidate: undoCandidate,
+    clearUndo: clearUndo,
+    emptySourcePreferences: emptySourcePreferences,
+    parseSourcePreferences: parseSourcePreferences,
+    addSourceFolder: addSourceFolder,
+    removeSourceFolder: removeSourceFolder,
+    updateSourcePreferences: updateSourcePreferences,
+    sourceDirectories: sourceDirectories,
     emptyState: emptyState,
     parseState: parseState,
     assignmentForWorkspace: assignmentForWorkspace,
