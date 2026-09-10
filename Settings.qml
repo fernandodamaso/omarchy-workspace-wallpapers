@@ -126,7 +126,7 @@ Item {
     root.sourceSelection = next.lastSource
     root.sortSelection = next.sort
     root.thumbnailSizeSelection = next.thumbnailSize
-    if (sourceDropdown) sourceDropdown.value = next.lastSource
+    if (sourceControls) sourceControls.setDisplayedSource(next.lastSource)
   }
 
   function refreshRows() {
@@ -184,13 +184,13 @@ Item {
     if (source !== "theme" && source !== "folders" && source !== "recent" && source !== "all") return
     if (source === root.sourceSelection) return
     if (!wallpaperService || typeof wallpaperService.requestUpdateSourcePreferences !== "function") {
-      sourceDropdown.value = root.sourceSelection
+      sourceControls.setDisplayedSource(root.sourceSelection)
       root.showError("", "Workspace wallpaper service is unavailable")
       return
     }
     var accepted = wallpaperService.requestUpdateSourcePreferences({ lastSource: source })
     if (accepted !== true) {
-      sourceDropdown.value = root.sourceSelection
+      sourceControls.setDisplayedSource(root.sourceSelection)
       root.showError("", "Image source settings are still saving")
       return
     }
@@ -282,12 +282,6 @@ Item {
         || sourceFolderOpenProcess.running) return
     sourceFolderOpenProcess.command = ["xdg-open", folder]
     sourceFolderOpenProcess.running = true
-  }
-
-  function basename(path) {
-    var value = String(path || "").replace(/\/+$/, "")
-    var slash = value.lastIndexOf("/")
-    return slash >= 0 ? (value.substring(slash + 1) || "/") : value
   }
 
   function startFolderDialog() {
@@ -611,14 +605,14 @@ Item {
             id: sourceSectionPanel
             visible: root.sourceSectionOpen
             Layout.fillWidth: true
-            implicitHeight: sourceSection.implicitHeight + contentTopInset + contentBottomInset
+            implicitHeight: sourceControls.implicitHeight + contentTopInset + contentBottomInset
             color: Color.background
             radius: Style.cornerRadius
             borderSpec: Border.controlSpec("normal", Color.foreground, Color.accent)
             padding: Style.spacing.md
 
-            ColumnLayout {
-              id: sourceSection
+            WallpaperSources {
+              id: sourceControls
               visible: root.sourceSectionOpen
               anchors.left: parent.left
               anchors.right: parent.right
@@ -628,89 +622,16 @@ Item {
               anchors.rightMargin: sourceSectionPanel.contentRightInset
               anchors.topMargin: sourceSectionPanel.contentTopInset
               anchors.bottomMargin: sourceSectionPanel.contentBottomInset
-              spacing: Style.spacing.controlGap
-
-              Dropdown {
-                id: sourceDropdown
-                Layout.fillWidth: true
-                Layout.minimumWidth: 0
-                label: "Default source for picker"
-                value: root.sourceSelection
-                options: root.sourceOptions
-                enabled: !root.sourcePreferencesPending
-                onChanged: root.setSourceSelection(value)
-              }
-
-              Text {
-                Layout.fillWidth: true
-                textFormat: Text.PlainText
-                text: "Saved folders"
-                color: Color.foreground
-                font.family: Style.font.family
-                font.pixelSize: Style.font.caption
-                font.bold: true
-              }
-
-              Text {
-                Layout.fillWidth: true
-                visible: root.sourcePreferences.folders.length === 0
-                text: "No saved folders"
-                color: Color.foreground
-                font.family: Style.font.family
-                font.pixelSize: Style.font.caption
-                opacity: 0.7
-              }
-
-              ListView {
-                id: sourceFolderList
-                Layout.fillWidth: true
-                Layout.preferredHeight: Math.min(Style.space(160), contentHeight)
-                visible: count > 0
-                clip: true
-                spacing: Style.spacing.xs
-                model: root.sourcePreferences.folders
-
-                delegate: RowLayout {
-                  width: sourceFolderList.width
-                  spacing: Style.spacing.controlGap
-
-                  Button {
-                    Layout.fillWidth: true
-                    Layout.minimumWidth: 0
-                    text: root.basename(modelData)
-                    tooltipText: String(modelData)
-                    leftAlign: true
-                    bordered: true
-                    focusable: true
-                    clip: true
-                  }
-
-                  Button {
-                    text: "Open in Files"
-                    tooltipText: "Open " + String(modelData) + " in Files"
-                    bordered: true
-                    focusable: true
-                    onClicked: root.openSourceFolder(modelData)
-                  }
-
-                  Button {
-                    text: "Remove"
-                    tooltipText: "Remove " + String(modelData)
-                    bordered: true
-                    focusable: true
-                    enabled: !root.sourcePreferencesPending
-                    onClicked: root.removeSourceFolder(modelData)
-                  }
-                }
-              }
-
-              Button {
-                text: "Add folder…"
-                bordered: true
-                focusable: true
-                enabled: !root.sourcePreferencesPending
-                onClicked: root.startFolderDialog()
-              }
+              folders: root.sourcePreferences.folders
+              sourceOptions: root.sourceOptions
+              sourceSelection: root.sourceSelection
+              pending: root.sourcePreferencesPending
+              home: root.home
+              // Keep status in the existing panel-wide message area for UI-01.
+              onSourceChangeRequested: root.setSourceSelection(value)
+              onAddFolderRequested: root.startFolderDialog()
+              onOpenFolderRequested: root.openSourceFolder(path)
+              onRemoveFolderRequested: root.removeSourceFolder(path)
             }
           }
 

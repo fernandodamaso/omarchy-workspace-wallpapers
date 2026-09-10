@@ -71,6 +71,8 @@ test('workspace wallpaper panel exposes visual source browsing and stable target
   const settings = read('Settings.qml');
   const browser = read('WallpaperBrowser.qml');
   const row = read('components/WorkspaceRow.qml');
+  const sources = read('components/WallpaperSources.qml');
+  const preview = read('components/WallpaperPreview.qml');
   const service = read('WorkspaceWallpapers.qml');
 
   assert.match(settings, /WallpaperBrowser\s*\{/);
@@ -86,6 +88,13 @@ test('workspace wallpaper panel exposes visual source browsing and stable target
   assert.match(browser, /onStreamFinished/);
   assert.match(row, /DropArea\s*\{/);
   assert.match(row, /signal\s+undoRequested/);
+  // Presentation contracts follow the component that now owns the source.
+  assert.match(sources, /Dropdown\s*\{/);
+  assert.match(sources, /model:\s*root\.folders/);
+  assert.match(sources, /signal\s+removeFolderRequested\(path:\s*string\)/);
+  assert.match(preview, /Image\.PreserveAspectCrop/);
+  assert.match(preview, /asynchronous:\s*true/);
+  assert.match(preview, /Using global background/);
   assert.match(service, /preferences\.json/);
   assert.match(service, /history\.json/);
   assert.match(service, /stateReady/);
