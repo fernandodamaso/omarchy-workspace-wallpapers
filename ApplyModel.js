@@ -148,7 +148,7 @@ function createEngine(options) {
         var err = outcome || { code: "worker-protocol", message: "Missing worker result.", exitCode: 5 }
         var uncertain = err.exitCode === 5 || !!(err.data && err.data.committed)
         if (uncertain) ready = false
-        lastError = { code: err.code || "runtime-failure", message: err.message || "Apply failed.", exitCode: err.exitCode || 6 }
+        lastError = { code: err.code || "runtime-failure", message: err.message || "Apply failed.", exitCode: uncertain ? 5 : (err.exitCode || 6) }
         completion = result(id, uncertain ? "unknown" : "failed", false, lastError.code, lastError.message,
           { exitCode: lastError.exitCode, retrySafe: false, committed: !!(err.data && err.data.committed) })
       } else {
