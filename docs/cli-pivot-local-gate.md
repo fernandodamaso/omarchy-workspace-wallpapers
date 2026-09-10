@@ -4,6 +4,8 @@ Owner: [FDM-913](https://linear.app/fdamaso/issue/FDM-913), a coding agent in th
 
 This runbook replaces settings/browser/picker-focus qualification. `docs/local-smoke.md` and `docs/wp03-local-gate.md` remain historical. Headless checks do not prove QML loading or Quickshell/Hyprland rendering. Agents own inspection, fixes and acceptance; Fernando is not a ceremonial code reviewer.
 
+The required workflow is **edit desired JSON → validate → dry-run → explicit apply → inspect status**. Prove that saving JSON does not apply changes and that only explicit apply publishes the complete wallpaper map.
+
 ## Exact candidate and reversible setup
 
 Read the latest FDM-912 completion evidence and FDM-913 handoff for the **full candidate SHA and successful CI run**. Require completed remote issues FDM-910/FDM-911/FDM-912. Record that SHA before fetching; do not silently substitute a newer branch head. A documentation file cannot identify its own future commit, so Linear's exact-SHA handoff is authoritative.
