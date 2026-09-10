@@ -1,10 +1,8 @@
 'use strict';
-
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
-
 const root = path.resolve(__dirname, '..');
 const read = file => fs.readFileSync(path.join(root, file), 'utf8');
 
@@ -17,13 +15,7 @@ test('plugin registers only the native wallpaper service', () => {
 });
 
 test('graphical configuration files and their optional menu entry are removed', () => {
-  const retired = [
-    'Settings.qml',
-    'WallpaperBrowser.qml',
-    'components/PickerController.qml',
-    'components/WorkspaceRow.qml',
-    'examples/omarchy-menu.jsonc'
-  ];
+  const retired = ['Settings.qml', 'WallpaperBrowser.qml', 'components/PickerController.qml', 'components/WorkspaceRow.qml', 'examples/omarchy-menu.jsonc'];
   assert.deepEqual(retired.filter(file => fs.existsSync(path.join(root, file))), []);
 });
 
@@ -44,19 +36,15 @@ test('service contains no graphical picker or theme-switcher process', () => {
   assert.doesNotMatch(service, /"bash",\s*"-lc"/);
 });
 
-test('UI removal retains legacy data and the low-level runtime contracts', () => {
+test('CLI cutover retains legacy data and native IPC without a competing legacy writer', () => {
   const service = read('WorkspaceWallpapers.qml');
-  for (const file of ['assignments.json', 'preferences.json', 'history.json']) {
-    assert.ok(service.includes(file), `legacy data remains available: ${file}`);
-  }
-  for (const name of ['assign', 'clear', 'undo', 'reload', 'status']) {
-    assert.match(service, new RegExp(`function\\s+${name}\\(`));
-  }
+  for (const file of ['assignments.json', 'preferences.json', 'history.json']) assert.ok(service.includes(file), file);
+  for (const name of ['assign', 'clear', 'undo', 'reload', 'status']) assert.match(service, new RegExp(`function\\s+${name}\\(`));
   assert.match(service, /NativeBackgroundBridge\s*\{/);
   assert.match(service, /WorkspaceWallpaperPanel\s*\{/);
-  assert.match(service, /atomicWrites:\s*true/);
-  assert.match(service, /onSaved:\s*root\.commitPendingSave\(\)/);
-  assert.match(service, /onSaveFailed:\s*function\(error\)/);
-  assert.match(service, /command:\s*\["mkdir",\s*"-p",\s*root\.stateDirectory\]/);
-  assert.doesNotMatch(service, /"rm"|unlink\(|removeRecursively/);
+  assert.match(service, /ConfigApplyController\s*\{/);
+  assert.match(service, /use-config-cli/);
+  assert.doesNotMatch(service, /setText\(|"mkdir"|"rm"|unlink\(|removeRecursively|watchChanges:\s*true/);
+  assert.match(read('cli/runtime-store.cjs'), /io\.fsyncSync\(tempFd\)/);
+  assert.match(read('cli/runtime-store.cjs'), /io\.renameSync\(temporary, paths\.applied\)/);
 });

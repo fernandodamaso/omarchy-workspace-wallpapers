@@ -1,12 +1,10 @@
 'use strict';
-
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
-
 const root = path.resolve(__dirname, '..');
-const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
+const read = file => fs.readFileSync(path.join(root, file), 'utf8');
 
 test('manifest clones the stock Omarchy background service', () => {
   const manifest = JSON.parse(read('manifest.json'));
@@ -29,37 +27,31 @@ test('native background bridge keeps the current stock IPC method signatures', (
   assert.match(bridge, /function\s+themeTransition\(fromPath:\s*string,\s*path:\s*string,\s*finalPath:\s*string,\s*colorsB64:\s*string,\s*shellB64:\s*string\):\s*void/);
 });
 
-test('workspace IPC retains transitional operations and completion notifications', () => {
+test('workspace IPC retains transitional signatures and completion notifications', () => {
   const service = read('WorkspaceWallpapers.qml');
   assert.match(service, /target:\s*"workspace-wallpapers"/);
-  for (const name of ['assign', 'clear', 'undo', 'reload', 'status']) {
-    assert.match(service, new RegExp(`function\\s+${name}\\(`));
-  }
+  for (const name of ['assign', 'clear', 'undo', 'reload', 'status']) assert.match(service, new RegExp(`function\\s+${name}\\(`));
   assert.match(service, /signal\s+operationFinished\(result:\s*string\)/);
   assert.doesNotMatch(service, /function\s+(playlist|schedule|randomize|video)\s*\(/i);
 });
 
-test('non-visual IPC routes mutations to the existing service methods', () => {
+test('legacy mutation IPC routes to explicit CLI guidance and cannot write state', () => {
   const service = read('WorkspaceWallpapers.qml');
   assert.match(service, /function assign\(workspaceKey: string, path: string\): void\s*\{\s*root\.requestAssignment\(workspaceKey, path\)/);
   assert.match(service, /function clear\(workspaceKey: string\): void\s*\{\s*root\.clearAssignment\(workspaceKey\)/);
   assert.match(service, /function undo\(workspaceKey: string\): void\s*\{\s*root\.requestUndo\(workspaceKey\)/);
-  assert.match(service, /importProc\.command\s*=\s*\[importScriptPath, source\]/);
-  assert.doesNotMatch(service, /Settings\s*\{|WallpaperBrowser\s*\{|PickerController\s*\{/);
+  for (const operation of ['assign', 'clear', 'undo']) assert.ok(service.includes('rejectLegacyMutation("' + operation + '"'));
+  assert.doesNotMatch(service, /setText\(|importProc|Settings\s*\{|WallpaperBrowser\s*\{|PickerController\s*\{/);
 });
 
-test('legacy preferences history and revision-scoped undo remain service-owned', () => {
+test('legacy preferences and history are read-only status metadata', () => {
   const service = read('WorkspaceWallpapers.qml');
   assert.match(service, /preferences\.json/);
   assert.match(service, /history\.json/);
-  assert.match(service, /stateReady/);
-  assert.match(service, /preferencesReady/);
-  assert.match(service, /historyReady/);
+  for (const name of ['stateReady', 'preferencesReady', 'historyReady']) assert.ok(service.includes(name));
   assert.match(service, /payload\.sourcePreferences = sourcePreferencesData\(\)/);
   assert.match(service, /payload\.history = historyData\(\)/);
-  assert.match(service, /Model\.undoCandidate\(historyData\(\), key, assignmentRevision\)/);
-  assert.match(service, /onSaved:\s*root\.commitPendingHistorySave\(\)/);
-  assert.match(service, /onSaved:\s*root\.commitPendingSourcePreferencesSave\(\)/);
+  assert.doesNotMatch(service, /setText\(|onSaved:|saveMutationHistory|watchChanges:\s*true/);
 });
 
 test('current documentation does not advertise a graphical settings entry', () => {
@@ -67,18 +59,22 @@ test('current documentation does not advertise a graphical settings entry', () =
   assert.doesNotMatch(read('README.md'), /shell summon io\.github\.fernandodamaso\.workspace-wallpapers/);
 });
 
-test('assignment state changes only after FileView save confirmation', () => {
+test('service publishes complete snapshots only through the verified apply controller', () => {
   const service = read('WorkspaceWallpapers.qml');
-  assert.match(service, /atomicWrites:\s*true/);
-  assert.match(service, /pendingState/);
-  assert.match(service, /onSaved:\s*root\.commitPendingSave\(\)/);
-  assert.match(service, /onSaveFailed:/);
-  assert.match(service, /pendingSave\s*=/);
+  assert.match(service, /onSnapshotPublished:\s*function\(runtime\)/);
+  assert.match(service, /root\.configState = \{ version: 1, assignments: runtime\.snapshot\.assignments \}/);
+  assert.match(service, /root\.assignmentRevision = runtime\.snapshot\.revision/);
+  assert.match(read('ConfigApplyController.qml'), /engine\.finish\(job\.requestId, outcome\)/);
+  assert.doesNotMatch(service, /root\.configState = Model\.emptyState\(\)/);
 });
 
-test('failed saves reset FileView before the next mutation', () => {
+test('reload reads applied state without watching or applying desired configuration', () => {
+  const controller = read('ConfigApplyController.qml');
+  assert.match(controller, /launch\("inspect"/);
+  assert.match(controller, /engine\.load\(outcome\.data\)/);
+  assert.doesNotMatch(controller, /watchChanges:\s*true|config\.json|writeConfig/);
   const service = read('WorkspaceWallpapers.qml');
-  assert.match(service, /function failPendingSave\([\s\S]*?stateFile\.reload\(\)/);
+  assert.match(service, /applyController\.reload\(true\)/);
 });
 
 test('service retains root and IPC operationFinished signals for existing consumers', () => {
@@ -139,22 +135,11 @@ test('WP-03 same-path reloads are revision-driven without polling or idle writes
 
 test('theme transition keeps payload application independent of image decoding', () => {
   const service = read('WorkspaceWallpapers.qml');
-  assert.match(
-    service,
-    /function\s+themeTransitionNative\([\s\S]*?setNativeBackground\([\s\S]*?applyThemePayload\(colorsB64,\s*shellB64\)/
-  );
+  assert.match(service, /function\s+themeTransitionNative\([\s\S]*?setNativeBackground\([\s\S]*?applyThemePayload\(colorsB64,\s*shellB64\)/);
 });
 
 test('local pivot handoff explicitly gates compositor-only behavior', () => {
   const smoke = read('docs/cli-pivot-local-gate.md');
-  const required = [
-    'Quickshell/Hyprland rendering',
-    'workspace switching',
-    'monitor behavior',
-    'explicit apply',
-    'lock/unlock',
-    'stock renderer restoration'
-  ];
-  for (const phrase of required) assert.match(smoke, new RegExp(phrase.replace('/', '\\/'), 'i'));
+  for (const phrase of ['Quickshell/Hyprland rendering', 'workspace switching', 'monitor behavior', 'explicit apply', 'lock/unlock', 'stock renderer restoration']) assert.match(smoke, new RegExp(phrase.replace('/', '\\/'), 'i'));
   assert.match(smoke, /LOCAL GATE/i);
 });
