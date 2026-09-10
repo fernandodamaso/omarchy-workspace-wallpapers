@@ -80,3 +80,21 @@ test('split view is bounded and responsive and detail mutations emit intent only
   assert.ok(/root\.imagePath !== ""/.test(detail), 'global reset requires a custom image');
   assert.doesNotMatch(detail, /shell\.serviceFor|FileView\s*\{|Process\s*\{|requestAssignment|clearAssignment|requestUndo/);
 });
+
+test('Escape closes exactly one surface at a time', () => {
+  const state = panelState();
+  assert.equal(typeof state.dismissTarget, 'function');
+  assert.equal(state.dismissTarget(true, true), 'folders');
+  assert.equal(state.dismissTarget(true, false), 'folders');
+  assert.equal(state.dismissTarget(false, true), 'browser');
+  assert.equal(state.dismissTarget(false, false), 'panel');
+});
+
+test('native picker cannot revive a closed or replaced session', () => {
+  const state = panelState();
+  assert.equal(typeof state.pickerMayRestore, 'function');
+  assert.equal(state.pickerMayRestore(4, 4, true), true);
+  assert.equal(state.pickerMayRestore(5, 4, true), false);
+  assert.equal(state.pickerMayRestore(4, 4, false), false);
+  assert.equal(state.pickerMayRestore(4, '4', true), false);
+});
