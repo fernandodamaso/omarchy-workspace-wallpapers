@@ -7,6 +7,7 @@ import QtQuick.Layouts
 import qs.Commons
 import qs.Ui
 import "WorkspaceModel.js" as Model
+import "PanelState.js" as PanelState
 import "components"
 
 Item {
@@ -18,7 +19,15 @@ Item {
   property bool opened: false
   property bool browserOpen: false
   property string browserTargetKey: ""
+  property string selectedWorkspaceKey: ""
   property var rows: []
+  readonly property var selectedRow: {
+    for (var i = 0; i < root.rows.length; i++) {
+      if (root.rows[i].key === root.selectedWorkspaceKey) return root.rows[i]
+    }
+    return null
+  }
+  readonly property string focusedWorkspaceKey: Model.preferredWorkspaceKey(Hyprland.focusedWorkspace)
   property var extraWorkspaceKeys: []
   property var sourcePreferences: Model.emptySourcePreferences()
   property var history: Model.emptyHistoryState()
@@ -142,10 +151,26 @@ Item {
     var targetExists = root.rows.some(function(row) { return row.key === root.sourceTargetKey })
     if (!targetExists && !root.browserOpen)
       root.sourceTargetKey = root.rows.length ? root.rows[0].key : ""
+    root.resolveSelectedWorkspace()
+  }
+
+  function resolveSelectedWorkspace() {
+    root.selectedWorkspaceKey = PanelState.resolveSelection(
+      root.rows, root.selectedWorkspaceKey, root.focusedWorkspaceKey)
+  }
+
+  function selectWorkspace(key) {
+    if (root.rows.some(function(row) { return row.key === key }))
+      root.selectedWorkspaceKey = key
   }
 
   function isBusy() {
     return !!(wallpaperService && wallpaperService.mutationBusy)
+  }
+
+  function busyFor(key) {
+    if (!key || !root.isBusy()) return false
+    return String(wallpaperService.pendingAssignmentKey || wallpaperService.pendingOperationKey || "") === key
   }
 
   function errorFor(key) {
@@ -169,6 +194,7 @@ Item {
   }
 
   function choose(key) {
+    root.selectWorkspace(key)
     if (root.isBusy()) {
       root.showError(key, "Another wallpaper operation is still saving")
       return
@@ -378,6 +404,7 @@ Item {
       root.extraWorkspaceKeys = root.extraWorkspaceKeys.concat([key])
       root.refreshRows()
     }
+    root.selectWorkspace(key)
     addWorkspaceField.text = ""
     root.addWorkspaceError = ""
     root.clearMessage()
@@ -423,8 +450,6 @@ Item {
     root.refreshRows()
   }
 
-  // Tracks the active theme so the picker also offers the user's per-theme
-  // backgrounds folder, mirroring omarchy-theme-bg-switcher.
   FileView {
     id: themeNameFile
     path: root.stateHome + "/omarchy/current/theme.name"
@@ -438,7 +463,6 @@ Item {
   Process {
     id: folderDialog
     command: ["zenity", "--file-selection", "--directory"]
-
     stdout: StdioCollector {
       id: folderDialogStdout
       waitForEnd: true
@@ -447,7 +471,6 @@ Item {
         root.finishFolderDialog()
       }
     }
-
     onExited: function(exitCode) {
       root.folderDialogExitCode = exitCode
       root.folderDialogExited = true
@@ -489,7 +512,6 @@ Item {
 
   PickerController {
     id: pickerController
-
     onSelected: function(key, path) {
       root.opened = true
       root.assignPath(key, path)
@@ -534,18 +556,17 @@ Item {
         id: card
         anchors.centerIn: parent
         visible: !root.browserOpen
-        width: Math.max(1, Math.min(parent.width - Style.space(32), Style.space(960)))
-        height: Math.max(1, Math.min(parent.height - Style.space(32), content.implicitHeight + Style.space(32)))
+        width: Math.max(1, Math.min(parent.width - Style.space(32), Style.space(1280)))
+        height: Math.max(1, Math.min(parent.height - Style.space(32), content.implicitHeight + Style.space(48)))
         color: Color.background
         radius: Style.cornerRadius
         borderSpec: Border.controlSpec("normal", Color.foreground, Color.accent)
-
         MouseArea { anchors.fill: parent; onClicked: {} }
 
         Flickable {
           id: contentViewport
           anchors.fill: parent
-          anchors.margins: Style.space(16)
+          anchors.margins: Style.space(24)
           contentWidth: width
           contentHeight: content.implicitHeight
           clip: true
@@ -554,152 +575,204 @@ Item {
           ColumnLayout {
             id: content
             width: contentViewport.width
-            spacing: Style.spacing.controlGap
+            spacing: Style.space(16)
 
-          RowLayout {
-            Layout.fillWidth: true
+            GridLayout {
+              Layout.fillWidth: true
+              columns: card.width >= Style.space(640) ? 3 : 1
+              columnSpacing: Style.space(16)
+              rowSpacing: Style.spacing.controlGap
+              Text {
+                Layout.fillWidth: true
+                Layout.minimumWidth: 0
+                textFormat: Text.PlainText
+                text: "Workspace Wallpapers"
+                color: Color.foreground
+                font.family: Style.font.family
+                font.pixelSize: Style.font.title
+                font.bold: true
+                elide: Text.ElideRight
+              }
+              Button {
+                id: foldersButton
+                text: "Wallpaper folders…"
+                selected: root.sourceSectionOpen
+                bordered: true
+                focusable: true
+                onClicked: root.sourceSectionOpen = !root.sourceSectionOpen
+              }
+              Button {
+                text: "Close"
+                tooltipText: "Esc to close"
+                bordered: true
+                focusable: true
+                onClicked: root.dismiss()
+              }
+            }
+
             Text {
               Layout.fillWidth: true
-              text: "Workspace Wallpapers"
-              color: Color.foreground
-              font.family: Style.font.family
-              font.pixelSize: Style.font.title
-              font.bold: true
-            }
-            Text {
-              text: "Esc to close"
-              color: Color.foreground
-              opacity: 0.6
+              textFormat: Text.PlainText
+              text: root.statusMessage
+              visible: root.statusMessage !== "" && root.rowErrorKey === "" && root.rowMessageKey === ""
+              color: root.statusError ? Color.urgent : Color.accent
               font.family: Style.font.family
               font.pixelSize: Style.font.caption
-              textFormat: Text.PlainText
+              wrapMode: Text.Wrap
             }
-            Button {
-              text: "Close"
-              bordered: true
-              focusable: true
-              onClicked: root.dismiss()
-            }
-          }
 
-          Text {
-            Layout.fillWidth: true
-            textFormat: Text.PlainText
-            text: root.statusMessage
-            visible: root.statusMessage !== ""
-            color: root.statusError ? Color.urgent : Color.accent
-            font.family: Style.font.family
-            font.pixelSize: Style.font.caption
-            wrapMode: Text.Wrap
-          }
-
-          Button {
-            text: "Wallpaper folders…"
-            selected: root.sourceSectionOpen
-            bordered: true
-            focusable: true
-            onClicked: root.sourceSectionOpen = !root.sourceSectionOpen
-          }
-
-          BorderSurface {
-            id: sourceSectionPanel
-            visible: root.sourceSectionOpen
-            Layout.fillWidth: true
-            implicitHeight: sourceControls.implicitHeight + contentTopInset + contentBottomInset
-            color: Color.background
-            radius: Style.cornerRadius
-            borderSpec: Border.controlSpec("normal", Color.foreground, Color.accent)
-            padding: Style.spacing.md
-
-            WallpaperSources {
-              id: sourceControls
+            BorderSurface {
+              id: sourceSectionPanel
               visible: root.sourceSectionOpen
-              anchors.left: parent.left
-              anchors.right: parent.right
-              anchors.top: parent.top
-              anchors.bottom: parent.bottom
-              anchors.leftMargin: sourceSectionPanel.contentLeftInset
-              anchors.rightMargin: sourceSectionPanel.contentRightInset
-              anchors.topMargin: sourceSectionPanel.contentTopInset
-              anchors.bottomMargin: sourceSectionPanel.contentBottomInset
-              folders: root.sourcePreferences.folders
-              sourceOptions: root.sourceOptions
-              sourceSelection: root.sourceSelection
-              pending: root.sourcePreferencesPending
-              home: root.home
-              // Keep status in the existing panel-wide message area for UI-01.
-              onSourceChangeRequested: root.setSourceSelection(value)
-              onAddFolderRequested: root.startFolderDialog()
-              onOpenFolderRequested: root.openSourceFolder(path)
-              onRemoveFolderRequested: root.removeSourceFolder(path)
-            }
-          }
-
-          Text {
-            Layout.fillWidth: true
-            visible: root.rows.length === 0
-            text: "No normal workspaces are currently visible. Add a saved workspace key above."
-            color: Color.foreground
-            font.family: Style.font.family
-            font.pixelSize: Style.font.body
-            opacity: 0.7
-            wrapMode: Text.Wrap
-          }
-
-          ListView {
-            id: workspaceList
-            Layout.fillWidth: true
-            Layout.preferredHeight: Style.space(360)
-            clip: true
-            spacing: Style.spacing.controlGap
-            model: root.rows
-            delegate: WorkspaceRow {
-              width: workspaceList.width
-              workspaceKey: modelData.key
-              label: modelData.label
-              imagePath: modelData.path
-              present: modelData.present
-              busy: root.isBusy()
-              errorText: root.errorFor(modelData.key)
-              messageText: root.rowMessageFor(modelData.key)
-              undoAvailable: root.undoAvailable(modelData.key)
-              current: root.isCurrentWorkspace(modelData.key)
-              onChooseRequested: root.choose(workspaceKey)
-              onResetRequested: root.reset(workspaceKey)
-              onUndoRequested: root.undo(workspaceKey)
-              onPathSubmitted: function(path) { root.assignPath(workspaceKey, path) }
-              onImageDropped: function(path) { root.assignPath(workspaceKey, path) }
-              onDropRejected: function(reason) { root.showError(workspaceKey, reason) }
-            }
-          }
-
-          RowLayout {
-            Layout.fillWidth: true
-            TextField {
-              id: addWorkspaceField
               Layout.fillWidth: true
-              placeholderText: "Add workspace number or exact name"
-              onTextChanged: root.addWorkspaceError = ""
-              onAccepted: root.addWorkspace()
+              implicitHeight: sourceControls.implicitHeight + contentTopInset + contentBottomInset
+              color: Color.background
+              radius: Style.cornerRadius
+              borderSpec: Border.controlSpec("normal", Color.foreground, Color.accent)
+              padding: Style.spacing.md
+              WallpaperSources {
+                id: sourceControls
+                visible: root.sourceSectionOpen
+                anchors.fill: parent
+                anchors.leftMargin: sourceSectionPanel.contentLeftInset
+                anchors.rightMargin: sourceSectionPanel.contentRightInset
+                anchors.topMargin: sourceSectionPanel.contentTopInset
+                anchors.bottomMargin: sourceSectionPanel.contentBottomInset
+                folders: root.sourcePreferences.folders
+                sourceOptions: root.sourceOptions
+                sourceSelection: root.sourceSelection
+                pending: root.sourcePreferencesPending
+                home: root.home
+                onSourceChangeRequested: root.setSourceSelection(value)
+                onAddFolderRequested: root.startFolderDialog()
+                onOpenFolderRequested: root.openSourceFolder(path)
+                onRemoveFolderRequested: root.removeSourceFolder(path)
+              }
             }
-            Button {
-              text: "Add workspace"
-              bordered: true
-              focusable: true
-              onClicked: root.addWorkspace()
-            }
-          }
 
-          Text {
-            Layout.fillWidth: true
-            visible: root.addWorkspaceError !== ""
-            text: root.addWorkspaceError
-            color: Color.urgent
-            font.family: Style.font.family
-            font.pixelSize: Style.font.caption
-            textFormat: Text.PlainText
-            wrapMode: Text.Wrap
-          }
+            GridLayout {
+              id: splitView
+              Layout.fillWidth: true
+              columns: card.width >= Style.space(980) ? 2 : 1
+              columnSpacing: Style.space(16)
+              rowSpacing: Style.space(16)
+
+              ColumnLayout {
+                Layout.fillWidth: true
+                Layout.minimumWidth: 0
+                Layout.preferredWidth: splitView.columns === 2 ? (splitView.width - splitView.columnSpacing) * 0.54 : splitView.width
+                Layout.alignment: Qt.AlignTop
+                spacing: Style.space(16)
+
+                Text {
+                  Layout.fillWidth: true
+                  textFormat: Text.PlainText
+                  text: "Workspaces"
+                  color: Color.foreground
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.heading
+                  font.bold: true
+                }
+                Text {
+                  Layout.fillWidth: true
+                  visible: root.rows.length === 0
+                  textFormat: Text.PlainText
+                  text: "No normal workspaces are listed. Add a number or exact name below."
+                  color: Color.foreground
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.body
+                  opacity: 0.7
+                  wrapMode: Text.Wrap
+                }
+
+                ListView {
+                  id: workspaceList
+                  Layout.fillWidth: true
+                  Layout.minimumWidth: 0
+                  Layout.preferredHeight: Style.space(380)
+                  visible: root.rows.length > 0
+                  clip: true
+                  spacing: Style.spacing.controlGap
+                  boundsBehavior: Flickable.StopAtBounds
+                  model: root.rows
+                  delegate: WorkspaceRow {
+                    required property var modelData
+                    width: workspaceList.width
+                    workspaceKey: modelData.key
+                    label: modelData.label
+                    imagePath: modelData.path
+                    present: modelData.present
+                    busy: root.busyFor(modelData.key)
+                    blocked: root.isBusy()
+                    errorText: root.errorFor(modelData.key)
+                    messageText: root.rowMessageFor(modelData.key)
+                    undoAvailable: root.undoAvailable(modelData.key)
+                    current: root.isCurrentWorkspace(modelData.key)
+                    selected: root.selectedWorkspaceKey === modelData.key
+                    onSelectionRequested: root.selectWorkspace(workspaceKey)
+                    onChooseRequested: root.choose(workspaceKey)
+                    onResetRequested: root.reset(workspaceKey)
+                    onUndoRequested: root.undo(workspaceKey)
+                    onPathSubmitted: function(path) { root.assignPath(workspaceKey, path) }
+                    onImageDropped: function(path) { root.assignPath(workspaceKey, path) }
+                    onDropRejected: function(reason) { root.showError(workspaceKey, reason) }
+                  }
+                }
+
+                GridLayout {
+                  Layout.fillWidth: true
+                  columns: width >= Style.space(420) ? 2 : 1
+                  columnSpacing: Style.spacing.controlGap
+                  rowSpacing: Style.spacing.controlGap
+                  TextField {
+                    id: addWorkspaceField
+                    Layout.fillWidth: true
+                    Layout.minimumWidth: 0
+                    placeholderText: "Workspace number or exact name"
+                    onTextChanged: root.addWorkspaceError = ""
+                    onAccepted: root.addWorkspace()
+                  }
+                  Button {
+                    text: "Add workspace"
+                    bordered: true
+                    focusable: true
+                    onClicked: root.addWorkspace()
+                  }
+                }
+                Text {
+                  Layout.fillWidth: true
+                  visible: root.addWorkspaceError !== ""
+                  text: root.addWorkspaceError
+                  color: Color.urgent
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.caption
+                  textFormat: Text.PlainText
+                  wrapMode: Text.Wrap
+                }
+              }
+
+              WorkspaceDetail {
+                Layout.fillWidth: true
+                Layout.minimumWidth: 0
+                Layout.preferredWidth: splitView.columns === 2 ? (splitView.width - splitView.columnSpacing) * 0.46 : splitView.width
+                Layout.alignment: Qt.AlignTop
+                workspaceKey: root.selectedWorkspaceKey
+                label: root.selectedRow ? root.selectedRow.label : ""
+                imagePath: root.selectedRow ? root.selectedRow.path : ""
+                present: root.selectedRow ? root.selectedRow.present : false
+                current: root.isCurrentWorkspace(root.selectedWorkspaceKey)
+                busy: root.busyFor(root.selectedWorkspaceKey)
+                blocked: root.isBusy()
+                errorText: root.errorFor(root.selectedWorkspaceKey)
+                messageText: root.rowMessageFor(root.selectedWorkspaceKey)
+                undoAvailable: root.undoAvailable(root.selectedWorkspaceKey)
+                onChooseRequested: root.choose(workspaceKey)
+                onResetRequested: root.reset(workspaceKey)
+                onUndoRequested: root.undo(workspaceKey)
+                onImageDropped: function(path) { root.assignPath(workspaceKey, path) }
+                onDropRejected: function(reason) { root.showError(workspaceKey, reason) }
+              }
+            }
           }
         }
       }
@@ -719,7 +792,6 @@ Item {
         thumbnailSizePreference: root.thumbnailSizeSelection
         sourceOptions: root.sourceOptions
         recentImages: root.history.recent
-
         onSelected: function(path) {
           var targetKey = root.browserTargetKey
           root.browserOpen = false
@@ -752,4 +824,5 @@ Item {
   }
 
   onLiveWorkspacesChanged: root.refreshRows()
+  onFocusedWorkspaceKeyChanged: root.resolveSelectedWorkspace()
 }

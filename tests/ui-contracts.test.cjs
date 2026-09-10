@@ -81,20 +81,24 @@ test('source modes remain exactly the existing shared preference options', () =>
   has(settings, /requestUpdateSourcePreferences\(\{ lastSource: source \}\)/, 'source uses existing shared lastSource preference');
 });
 
-test('workspace row keeps single-image drops and all existing action signals', () => {
+test('workspace surfaces keep single-image drops and existing action intents', () => {
   const row = read('components/WorkspaceRow.qml');
+  const detail = read('components/WorkspaceDetail.qml');
   for (const name of ['chooseRequested', 'resetRequested', 'undoRequested', 'pathSubmitted',
     'pathEntryRequested', 'imageDropped', 'dropRejected']) {
     has(row, new RegExp('signal\\s+' + name + '\\s*\\('), `${name} remains public`);
   }
-  has(row, /urls\.length !== 1/, 'exactly one dropped URL');
-  has(row, /decodeURIComponent\(path\.substring\(7\)\)/, 'file URLs are decoded');
-  has(row, /png\|jpe\?g\|webp/, 'only supported image extensions');
-  has(row, /root\.imageDropped\(path\)/, 'validated drops emit intent');
-  has(row, /visible:\s*root\.undoAvailable/, 'Undo remains conditional');
+  for (const surface of [row, detail]) {
+    has(surface, /urls\.length !== 1/, 'exactly one dropped URL');
+    has(surface, /decodeURIComponent\(path\.substring\(7\)\)/, 'file URLs are decoded');
+    has(surface, /png\|jpe\?g\|webp/, 'only supported image extensions');
+    has(surface, /root\.imageDropped\(path\)/, 'validated drops emit intent');
+    has(surface, /catch \(error\)/, 'malformed URLs are rejected without throwing');
+  }
+  has(detail, /visible:\s*root\.undoAvailable/, 'Undo remains conditional in its new owner');
   const settings = read('Settings.qml');
   for (const action of ['choose', 'reset', 'undo', 'assignPath']) {
-    has(settings, new RegExp('root\\.' + action + '\\(workspaceKey'), `${action} remains wired to row target`);
+    has(settings, new RegExp('root\\.' + action + '\\(workspaceKey'), `${action} remains wired to explicit target`);
   }
   has(settings, /Model\.normalizeImagePath\(String\(path \|\| ""\)\)/, 'controller validates again before service mutation');
 });
@@ -125,4 +129,31 @@ test('all assignment and source mutations stay in the scoped service controller'
   const service = read('WorkspaceWallpapers.qml');
   has(service, /onSaved:\s*root\.commitPendingSave\(\)/, 'service confirms committed assignments');
   has(service, /atomicWrites:\s*true/, 'service retains atomic writes');
+});
+
+test('compact row selects without assigning and both thumbnail and Change emit choose', () => {
+  const row = read('components/WorkspaceRow.qml');
+  has(row, /property bool selected:/, 'selection differs from present/current');
+  has(row, /signal selectionRequested\(\)/, 'body selection is a separate intent');
+  assert.equal((row.match(/onClicked:\s*root\.chooseRequested\(\)/g) || []).length, 2);
+  has(row, /elide:\s*Text\.ElideRight/, 'long labels and filenames elide');
+  has(row, /tooltipText:/, 'full label/key/path remains available');
+  assert.doesNotMatch(row, /Hyprland|requestAssignment|clearAssignment|shell\.serviceFor/);
+});
+
+test('saving eligibility uses the pending operation key rather than selected workspace', () => {
+  const settings = read('Settings.qml');
+  const match = settings.match(/function busyFor\(key\) \{([\s\S]*?)\n  \}/);
+  assert.ok(match);
+  const wallpaperService = { pendingAssignmentKey: 'id:2', pendingOperationKey: '' };
+  const root = { isBusy: () => true, selectedWorkspaceKey: 'id:7' };
+  const busy = vm.runInNewContext('(function(key) {' + match[1] + '\n})', { root, wallpaperService });
+  assert.equal(busy('id:2'), true);
+  assert.equal(busy('id:7'), false);
+  wallpaperService.pendingAssignmentKey = '';
+  wallpaperService.pendingOperationKey = 'name: Café ';
+  assert.equal(busy('name: Café '), true);
+  assert.equal(busy('name:Café'), false);
+  root.isBusy = () => false;
+  assert.equal(busy('name: Café '), false);
 });
