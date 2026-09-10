@@ -1,79 +1,73 @@
 # Workspace Wallpapers for Omarchy
 
-Native per-workspace static wallpapers for Omarchy Quattro.
+Native per-workspace static wallpapers for Omarchy Quattro, moving to JSON-first configuration and a coding-agent-friendly CLI.
 
-> **v0.1 static images only.** PNG, JPEG, and WebP are supported. Video, playlists, scheduling, and randomization are out of scope.
+> **CLI pivot checkpoint (FDM-910):** graphical configuration has been removed on this feature branch. The new `workspace-wallpapers` CLI, `config.json` schema, migration and explicit-apply engine are not implemented yet. This partial pivot is not a release and must not be merged or installed as the completed CLI product. The existing low-level IPC remains available during development.
 
-## Current implementation
+PNG, JPEG and static WebP remain the supported image formats. Video, playlists, scheduling and randomization are outside this version's scope.
 
-- Replaces the stock `omarchy.background` service through `omarchy.clonedFrom` while keeping the stock `background` IPC methods.
-- Resolves a wallpaper independently for every screen from that monitor's active Hyprland workspace.
-- Uses workspace keys `id:<positive integer>` first and `name:<exact name>` as a fallback. Name spaces and Unicode are preserved; `special` and `special:*` are excluded.
-- Retains the last normal workspace wallpaper while a `special:*` scratchpad is active.
-- Uses generation-tagged asynchronous image loads so stale completions cannot overwrite a newer workspace request.
-- Falls back once to the current global Omarchy background when an assigned image cannot decode, without deleting the assignment.
-- Invalidates renderer generations on state reload and background refresh so same-path replacements can be decoded again.
-- Imports assigned images into `${XDG_DATA_HOME:-$HOME/.local/share}/omarchy/workspace-wallpapers/images` after MIME validation.
-- Persists assignments in `~/.config/omarchy/workspace-wallpapers/assignments.json`.
-- Persists image-source preferences separately in `~/.config/omarchy/workspace-wallpapers/preferences.json` and recent/Undo history in `history.json`.
-- Exposes `workspace-wallpapers` IPC operations: `assign`, `clear`, `undo`, `reload`, `status`, plus the `operationFinished(string)` completion signal.
+## Configuration direction
 
-## Install
+The approved workflow is **edit desired JSON → validate → dry-run → explicit apply → inspect structured status**. Saving the new desired configuration alone will not change wallpapers. The runtime will not rewrite that configuration, and agent commands will report request-specific completion rather than equating command delivery with success.
 
-For a normal install after the candidate is merged:
+See the [approved design](docs/superpowers/specs/2026-09-10-cli-first-configuration-design.md) and [implementation plan](docs/superpowers/plans/2026-09-10-cli-first-configuration.md). These describe target interfaces, not commands available at this checkpoint.
+
+There is no settings page, visual image browser, graphical file/folder picker, or wallpaper/theme configuration double-click gesture in this branch. `WorkspaceWallpaperPanel.qml` remains because it renders the desktop background; it is not a settings screen. No TUI, web UI or MCP server replaces the removed page.
+
+## Retained runtime
+
+- Replaces the stock `omarchy.background` service through `omarchy.clonedFrom`, preserving the stock `background` IPC methods.
+- Resolves each screen's wallpaper from that monitor's active Hyprland workspace, preferring `id:<positive integer>` and then `name:<exact name>`.
+- Preserves exact workspace names, including spaces and Unicode, and retains the last normal wallpaper while a `special:*` scratchpad is active.
+- Uses generation-tagged asynchronous image loads so stale completions cannot replace a newer workspace request. An assigned image that cannot decode falls back once to the current global background without deleting the assignment.
+- Invalidates renderer generations on state reload and native background refresh, including same-path replacements.
+- Validates imported image MIME types and copies images into `${XDG_DATA_HOME:-$HOME/.local/share}/omarchy/workspace-wallpapers/images`.
+
+The removal does not migrate, reset or delete `~/.config/omarchy/workspace-wallpapers/assignments.json`, `preferences.json`, `history.json`, or imported images. Their existing paths and service behavior remain unchanged in this first slice. Legacy file watching is not the future desired-config explicit-apply contract; do not use direct legacy-file edits as a substitute for that planned interface.
+
+The plugin no longer invokes `zenity` or graphical wallpaper/theme selectors. It does not uninstall those applications or alter the global Omarchy menus. A custom menu entry copied from an older example is user-owned and is not automatically removed from host configuration.
+
+## Existing low-level IPC (transitional)
+
+With this service running in Omarchy, individual operations remain available:
+
+```bash
+omarchy-shell workspace-wallpapers assign "id:2" "/absolute/path/to/wallpaper.png"
+omarchy-shell workspace-wallpapers status
+omarchy-shell workspace-wallpapers reload
+omarchy-shell workspace-wallpapers clear "id:2"
+omarchy-shell workspace-wallpapers undo "id:2"
+```
+
+These are separate operations, not a batch script. Assignment imports and saves are asynchronous. Observe the `operationFinished` JSON result before issuing another mutation; the invocation returning is not proof of a successful save or rendered pixels. Undo is only available for its eligible workspace/revision. The planned CLI will handle correlated completion and timeouts explicitly.
+
+## Installation and qualification
+
+The default-branch installation command below installs whichever code is on `main`; it does **not** select the in-development CLI pivot:
 
 ```bash
 omarchy plugin add https://github.com/fernandodamaso/omarchy-workspace-wallpapers.git --enable
 ```
 
-The original WP-01 qualification flow remains in [`docs/local-smoke.md`](docs/local-smoke.md). WP-03 compositor/reliability qualification is handed off in [`docs/wp03-local-gate.md`](docs/wp03-local-gate.md).
+The complete pivot must pass the [local CLI/renderer gate](docs/cli-pivot-local-gate.md) before integration. Candidate installation and rollback belong to the local agent using the exact handoff SHA and the actual host's plugin lifecycle tools. Do not replace a dirty checkout, delete user images, or edit packaged Omarchy files.
 
-## IPC examples
-
-Use a normal positive workspace id:
-
-```bash
-SOURCE="/absolute/path/to/wallpaper.png"
-omarchy-shell workspace-wallpapers assign "id:2" "$SOURCE"
-omarchy-shell workspace-wallpapers status
-omarchy-shell workspace-wallpapers reload
-omarchy-shell workspace-wallpapers clear "id:2"
-```
-
-Assignments are asynchronous because `assign` validates and imports the image first. `operationFinished` reports completion as a single JSON string.
-
-## Native settings panel
-
-Open the panel through the native shell summon path:
-
-```bash
-omarchy-shell shell summon io.github.fernandodamaso.workspace-wallpapers '{}'
-```
-
-The panel lists current normal workspaces and saved assignments whose workspaces are absent. Each row has a clickable 16:9 preview and a `Change…` action. Change opens a visual browser for the captured workspace with thumbnail previews, filename search, name or modification-time sorting, adjustable thumbnail size, a larger crop preview, and an explicit `Use this wallpaper` confirmation. Sources include the current theme, saved folders, recently used images, and all sources. The browser also accepts a dropped folder; a workspace row accepts a single dropped PNG, JPEG, or WebP image.
-
-`Image sources…` manages remembered folders without requiring path entry. `Add folder…` and `Browse files…` use `zenity` graphical dialogs; `Open in Files` uses `xdg-open`. The full folder path is available as a tooltip, while the main list uses friendly folder names. `Enter image path…` remains available as a secondary fallback. Use `Use global background` to clear an assignment, and `Undo` to restore the previous explicit assignment or global fallback when the workspace has not changed again. The optional Style-menu entry is documented in [`examples/omarchy-menu.jsonc`](examples/omarchy-menu.jsonc); it is not installed automatically.
-
-The graphical file and folder actions require `zenity`; the thumbnail browser itself does not. The panel owns no assignment or preference file writes directly: it calls the plugin service and waits for atomic save completion.
-
-The panel owns no assignment file writes: it reads the plugin's scoped service and waits for `operationFinished` before showing a changed mapping. Picker cancellation, unsupported input, failed import, and failed save leave the previous assignment unchanged. Real picker focus, keyboard feel, compositor rendering, and error presentation remain part of the FDM-867 local gate.
+The future CLI requires Node 22 or newer; it is a separate, explicit dependency to verify and document when that executable is delivered. This UI-removal slice adds no runtime dependency.
 
 ## Headless checks
-
-GitHub CI runs only checks that are meaningful without an Omarchy compositor session:
 
 ```bash
 node --test tests/*.test.cjs
 bash -n bin/import-image
 git diff --check
+git diff --check origin/main...HEAD
 ```
 
-The remote regressions cover workspace/key normalization, persistence sanitization, latest-request-wins ordering, one-shot decode fallback, retired-screen invalidation, scratchpad retention, and source-level renderer contracts. Passing CI still does **not** establish real Quickshell rendering, monitor hotplug behavior, focus/picker behavior, or theme-transition visuals; FDM-867 owns those local checks.
+CI uses Node 22. Tests cover the no-UI registration boundary, retained service contracts, workspace/key normalization, persistence sanitization, render request ordering, decode fallback, screen retirement and scratchpad retention. Source contracts are not proof that QML loads or renders in a compositor.
 
-## Compatibility
+`docs/local-smoke.md` and `docs/wp03-local-gate.md` retain historical service/UI qualification instructions. Their picker/focus requirements do not apply to this pivot; the new local gate is authoritative. Earlier UI implementation plans are historical, not authorization to restore graphical configuration.
 
-The service bridge is pinned to the Omarchy `quattro` reference inspected on 2026-09-08. See [`docs/compatibility.md`](docs/compatibility.md) for the exact commit and compatibility boundary.
+## Compatibility and license
 
-## License
+The native bridge remains pinned to the Omarchy `quattro` reference inspected on 2026-09-08. See [compatibility](docs/compatibility.md) for the exact reference and limitations; this is not certification for every Omarchy version.
 
-MIT. See [`LICENSE`](LICENSE) and [`docs/third-party-notices.md`](docs/third-party-notices.md).
+MIT. See [LICENSE](LICENSE) and [third-party notices](docs/third-party-notices.md).

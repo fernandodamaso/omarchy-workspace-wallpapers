@@ -13,9 +13,9 @@ test('manifest clones the stock Omarchy background service', () => {
   assert.equal(manifest.schemaVersion, 1);
   assert.equal(manifest.id, 'io.github.fernandodamaso.workspace-wallpapers');
   assert.equal(manifest.version, '0.1.0');
-  assert.deepEqual(manifest.kinds, ['service', 'panel']);
+  assert.deepEqual(manifest.kinds, ['service']);
   assert.equal(manifest.entryPoints.service, 'WorkspaceWallpapers.qml');
-  assert.equal(manifest.entryPoints.panel, 'Settings.qml');
+  assert.equal(manifest.entryPoints.panel, undefined);
   assert.equal(manifest.omarchy.clonedFrom, 'omarchy.background');
 });
 
@@ -29,72 +29,42 @@ test('native background bridge keeps the current stock IPC method signatures', (
   assert.match(bridge, /function\s+themeTransition\(fromPath:\s*string,\s*path:\s*string,\s*finalPath:\s*string,\s*colorsB64:\s*string,\s*shellB64:\s*string\):\s*void/);
 });
 
-test('workspace IPC exposes only WP-01 operations and an operationFinished signal', () => {
+test('workspace IPC retains transitional operations and completion notifications', () => {
   const service = read('WorkspaceWallpapers.qml');
   assert.match(service, /target:\s*"workspace-wallpapers"/);
-  for (const name of ['assign', 'clear', 'reload', 'status']) {
+  for (const name of ['assign', 'clear', 'undo', 'reload', 'status']) {
     assert.match(service, new RegExp(`function\\s+${name}\\(`));
   }
   assert.match(service, /signal\s+operationFinished\(result:\s*string\)/);
   assert.doesNotMatch(service, /function\s+(playlist|schedule|randomize|video)\s*\(/i);
 });
 
-test('WP-02 panel uses the scoped service and native picker contracts', () => {
-  const settings = read('Settings.qml');
-  const picker = read('components/PickerController.qml');
-  const row = read('components/WorkspaceRow.qml');
-  assert.match(settings, /shell\.serviceFor\(manifest\.id\)/);
-  // The panel must call the service root's own methods; assign/clear exist
-  // only on the inner IpcHandler, not on the object serviceFor() returns.
-  assert.match(settings, /wallpaperService\.requestAssignment\(/);
-  assert.match(settings, /wallpaperService\.clearAssignment\(/);
-  // Picker directories mirror omarchy-theme-bg-switcher: current theme
-  // backgrounds plus the per-theme user folder; no invented env overrides.
-  assert.match(settings, /current\/theme\.name/);
-  assert.match(settings, /current\/theme\/backgrounds/);
-  assert.doesNotMatch(settings, /OMARCHY_IMAGE_SELECTOR/);
-  assert.match(settings, /composeWorkspaceRows/);
-  assert.match(settings, /onChooseRequested/);
-  assert.match(settings, /onResetRequested/);
-  assert.match(settings, /Keys\.onEscapePressed/);
-  assert.match(settings, /Color\.|Style\./);
-  assert.doesNotMatch(settings, /assignments\.json/);
-  assert.match(picker, /command\s*=\s*\[/);
-  assert.match(picker, /omarchy-menu-images/);
-  assert.match(picker, /targetKey/);
-  assert.match(picker, /expectedStop/);
-  assert.match(row, /signal\s+chooseRequested/);
-  assert.match(row, /signal\s+resetRequested/);
+test('non-visual IPC routes mutations to the existing service methods', () => {
+  const service = read('WorkspaceWallpapers.qml');
+  assert.match(service, /function assign\(workspaceKey: string, path: string\): void\s*\{\s*root\.requestAssignment\(workspaceKey, path\)/);
+  assert.match(service, /function clear\(workspaceKey: string\): void\s*\{\s*root\.clearAssignment\(workspaceKey\)/);
+  assert.match(service, /function undo\(workspaceKey: string\): void\s*\{\s*root\.requestUndo\(workspaceKey\)/);
+  assert.match(service, /importProc\.command\s*=\s*\[importScriptPath, source\]/);
+  assert.doesNotMatch(service, /Settings\s*\{|WallpaperBrowser\s*\{|PickerController\s*\{/);
 });
 
-test('workspace wallpaper panel exposes visual source browsing and stable target wiring', () => {
-  const settings = read('Settings.qml');
-  const browser = read('WallpaperBrowser.qml');
-  const row = read('components/WorkspaceRow.qml');
+test('legacy preferences history and revision-scoped undo remain service-owned', () => {
   const service = read('WorkspaceWallpapers.qml');
-
-  assert.match(settings, /WallpaperBrowser\s*\{/);
-  assert.match(settings, /browserTargetKey/);
-  assert.match(settings, /onThumbnailSizeChangedByUser/);
-  assert.match(settings, /zenity.*file-selection/);
-  assert.match(settings, /xdg-open/);
-  assert.match(settings, /Recently used/);
-  assert.match(browser, /signal\s+selected\(path:\s*string\)/);
-  assert.match(browser, /signal\s+sortChanged\(value:\s*string\)/);
-  assert.match(browser, /Use this wallpaper/);
-  assert.match(browser, /processSerial/);
-  assert.match(browser, /onStreamFinished/);
-  assert.match(row, /DropArea\s*\{/);
-  assert.match(row, /signal\s+undoRequested/);
   assert.match(service, /preferences\.json/);
   assert.match(service, /history\.json/);
   assert.match(service, /stateReady/);
+  assert.match(service, /preferencesReady/);
+  assert.match(service, /historyReady/);
+  assert.match(service, /payload\.sourcePreferences = sourcePreferencesData\(\)/);
+  assert.match(service, /payload\.history = historyData\(\)/);
+  assert.match(service, /Model\.undoCandidate\(historyData\(\), key, assignmentRevision\)/);
+  assert.match(service, /onSaved:\s*root\.commitPendingHistorySave\(\)/);
+  assert.match(service, /onSaved:\s*root\.commitPendingSourcePreferencesSave\(\)/);
 });
 
-test('WP-02 optional menu example is an inert documented entry', () => {
-  const example = read('examples/omarchy-menu.jsonc');
-  assert.match(example, /Workspace Wallpapers/);
-  assert.match(example, /shell summon io\.github\.fernandodamaso\.workspace-wallpapers/);
+test('current documentation does not advertise a graphical settings entry', () => {
+  assert.equal(fs.existsSync(path.join(root, 'examples/omarchy-menu.jsonc')), false);
+  assert.doesNotMatch(read('README.md'), /shell summon io\.github\.fernandodamaso\.workspace-wallpapers/);
 });
 
 test('assignment state changes only after FileView save confirmation', () => {
@@ -111,10 +81,8 @@ test('failed saves reset FileView before the next mutation', () => {
   assert.match(service, /function failPendingSave\([\s\S]*?stateFile\.reload\(\)/);
 });
 
-test('service emits operationFinished on the root item for in-process panels', () => {
+test('service retains root and IPC operationFinished signals for existing consumers', () => {
   const service = read('WorkspaceWallpapers.qml');
-  // The IPC handler signal alone is unreachable through serviceFor(); the
-  // panel's Connections target is the service root item.
   assert.match(service, /signal\s+operationFinished\(result:\s*string\)/);
   assert.match(service, /root\.operationFinished\(payload\)/);
   assert.match(service, /workspaceIpc\.operationFinished\(payload\)/);
@@ -177,13 +145,13 @@ test('theme transition keeps payload application independent of image decoding',
   );
 });
 
-test('local smoke handoff explicitly gates compositor-only behavior', () => {
-  const smoke = read('docs/local-smoke.md');
+test('local pivot handoff explicitly gates compositor-only behavior', () => {
+  const smoke = read('docs/cli-pivot-local-gate.md');
   const required = [
     'Quickshell/Hyprland rendering',
     'workspace switching',
     'monitor behavior',
-    'picker focus',
+    'explicit apply',
     'lock/unlock',
     'stock renderer restoration'
   ];

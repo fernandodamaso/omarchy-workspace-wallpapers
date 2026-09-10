@@ -158,18 +158,6 @@ PanelWindow {
     }
   }
 
-  TapHandler {
-    acceptedButtons: Qt.LeftButton
-    onDoubleTapped: {
-      if (panel.workspaceKey) controller.pickForWorkspace(panel.workspaceKey)
-    }
-  }
-
-  TapHandler {
-    acceptedButtons: Qt.RightButton
-    onDoubleTapped: controller.openThemeSwitcher()
-  }
-
   Component.onCompleted: updateWorkspace()
   Component.onDestruction: {
     renderState = Model.cancelRender(renderState)

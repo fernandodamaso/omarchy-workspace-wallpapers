@@ -25,7 +25,6 @@ Item {
   property int renderRevision: 0
   property string pendingAssignmentKey: ""
   property string pendingAssignmentSource: ""
-  property string pendingPickerKey: ""
   property bool pendingReload: false
   property bool pendingSave: false
   property var pendingState: null
@@ -48,10 +47,8 @@ Item {
     || pendingSave || pendingAssignmentKey !== "" || importProc.running
     || pendingPreferenceSave || pendingHistorySave
 
-  // In-process completion signal for the plugin's own panel. The identical
-  // payload is also emitted on the workspaceIpc IPC handler below; IPC
-  // signals live on the handler object, so serviceFor() consumers need this
-  // root-level signal to observe completions.
+  // Keep completion notifications on both the service root and IPC handler
+  // for existing non-visual consumers during the CLI transition.
   signal operationFinished(result: string)
   signal sourcePreferencesSaveFinished(success: bool)
 
@@ -377,17 +374,6 @@ Item {
     applyThemePayload(colorsB64, shellB64)
   }
 
-  function pickForWorkspace(workspaceKey) {
-    var key = Model.normalizeWorkspaceKey(workspaceKey)
-    if (!key || imagePicker.running || pendingPickerKey) return
-    pendingPickerKey = key
-    imagePicker.running = true
-  }
-
-  function openThemeSwitcher() {
-    if (!themeSwitcher.running) themeSwitcher.running = true
-  }
-
   Process {
     id: prepareStateDirectory
     command: ["mkdir", "-p", root.stateDirectory]
@@ -512,27 +498,6 @@ Item {
         root.finishOperation("assign", false, key, source, errorText || "import-failed")
       }
     }
-  }
-
-  Process {
-    id: imagePicker
-    command: ["omarchy-theme-bg-switcher"]
-    stdout: StdioCollector {
-      id: pickerStdout
-      waitForEnd: true
-    }
-    onExited: function(exitCode) {
-      var key = root.pendingPickerKey
-      var source = String(pickerStdout.text || "").trim()
-      root.pendingPickerKey = ""
-      if (exitCode === 0 && source) root.requestAssignment(key, source)
-    }
-  }
-
-  Process {
-    id: themeSwitcher
-    command: ["bash", "-lc", "theme=$(omarchy-theme-switcher); [[ -n $theme ]] && omarchy-theme-set \"$theme\" >/dev/null 2>&1 &"]
-    onExited: root.refreshBackground()
   }
 
   Process {
