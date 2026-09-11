@@ -2,20 +2,22 @@
 
 ## v0.1 qualification evidence
 
-The CLI/runtime candidate `4df6f3204c70a5daa58d0664dbac1b6cbce0f667` passed the FDM-913 local qualification on 2026-09-11 with:
+The CLI/runtime candidate `4df6f3204c70a5daa58d0664dbac1b6cbce0f667` passed the broad FDM-913 local qualification on 2026-09-11. The release-preparation SHA `0819599e3fe1c315deb645258783b06fee1e7ec7` then passed the final FDM-869 real-Omarchy release smoke on the same day. Changes after that smoke in the v0.1 publication path are documentation, agent-instruction, or merge-only changes; the runtime QML/CLI/model implementation is unchanged.
 
 | Component | Qualified version/evidence |
 | --- | --- |
 | Omarchy | `4.0.3-1` |
 | Quickshell | `0.3.1` |
-| Qt | `6.11.2` |
+| Qt / QML runtime | `6.11.2` |
 | Hyprland | `0.56.2` |
 | Node | `v26.7.0` locally; repository requirement remains Node 22+ |
 | Displays | DP-1 + HDMI-A-1, both 1920×1080 scale 1 |
 
-The exact remote candidate CI was run on Node `22.23.2` and passed 112 tests with zero failures/skips plus import-helper syntax and whitespace checks. These records establish evidence for the versions above; they are not blanket certification for arbitrary future Omarchy, Quickshell, Hyprland, Qt, or Node revisions.
+The remote candidate CI was also run on Node `22.23.2` and passed 112 tests with zero failures/skips plus import-helper syntax and whitespace checks. These records establish evidence for the versions above; they are not blanket certification for arbitrary future Omarchy, Quickshell, Hyprland, Qt, or Node revisions.
 
-FDM-913 exercised desired configuration, migration, validation, dry-run, explicit apply, status/doctor, concurrency/failure paths, real rendering, rapid workspace switching, a Unicode named workspace, absent/global fallback, id-over-name precedence, workspace movement between monitors, same-path image replacement, decode-failure fallback, native background/theme refresh, and disable/re-enable stock-renderer restoration. Scratchpad, monitor hotplug, and lock/unlock were not exercised there for the recorded local-safety reasons. The exact release-preparation SHA therefore still requires the short FDM-869 final smoke before publication.
+FDM-913 exercised desired configuration, migration, validation, dry-run, explicit apply, status/doctor, concurrency/failure paths, real rendering, rapid workspace switching, a Unicode named workspace, absent/global fallback, id-over-name precedence, workspace movement between monitors, same-path image replacement, decode-failure fallback, native background/theme refresh, and disable/re-enable stock-renderer restoration.
+
+FDM-869 closed the final release gaps on `0819599e3fe1c315deb645258783b06fee1e7ec7`: assigned and global workspaces, rapid switching, shell restart, lock/unlock, disable/re-enable stock restoration, update behavior, remove/reinstall recovery, data retention, and restoration of the pre-test desired configuration all passed. Scratchpad and monitor hotplug remain outside the recorded physical-test evidence.
 
 ## Reference snapshot
 
@@ -116,14 +118,22 @@ Migration creates desired configuration only when explicitly requested and never
 
 Disabling/re-enabling the plugin leaves all of these files intact. Native Omarchy plugin removal deletes or unlinks the plugin checkout, not these external config/state/data locations, so mappings/assets remain available for reinstall/recovery unless the user explicitly deletes them separately.
 
-## Release/recovery boundary
+## Release and recovery boundary
 
-The immediate reversible recovery is `omarchy plugin disable io.github.fernandodamaso.workspace-wallpapers`, which restores the stock `omarchy.background` owner without deleting saved state. The locally qualified pre-release runtime SHA is `4df6f3204c70a5daa58d0664dbac1b6cbce0f667`; a code rollback may pin the plugin checkout to that revision, validate it, and re-enable it while preserving desired/applied/legacy state and images.
+The immediate reversible recovery is:
 
-The release-preparation work after that SHA is documentation/metadata-only. If any later candidate changes runtime QML/CLI/model behavior, the affected local scenario must be requalified before release.
+```bash
+omarchy plugin disable io.github.fernandodamaso.workspace-wallpapers
+```
+
+Disabling restores the stock `omarchy.background` owner without deleting saved state. Re-enabling restores the plugin against retained desired/applied state and managed images.
+
+The locally qualified runtime baseline is `4df6f3204c70a5daa58d0664dbac1b6cbce0f667`, and the final release smoke passed on documentation-preparation SHA `0819599e3fe1c315deb645258783b06fee1e7ec7`. A code rollback may pin the plugin checkout to the qualified runtime revision, validate it, and re-enable it while preserving desired/applied/legacy state and images.
+
+Any future change to runtime QML, CLI/model behavior, service ownership, or rendering must requalify the affected local scenario before release. Documentation-only changes do not require repeating the compositor qualification.
 
 ## What GitHub CI does not establish
 
-Headless CI validates JavaScript/CLI behavior, subprocess/runtime-helper contracts, source/model behavior, Bash syntax, retention/no-UI boundaries, and whitespace. It does not establish real Quickshell/Hyprland pixels, monitor hotplug/remap behavior, lock/unlock behavior, or stock renderer restoration on a new exact release SHA.
+Headless CI validates JavaScript/CLI behavior, subprocess/runtime-helper contracts, source/model behavior, Bash syntax, retention/no-UI boundaries, and whitespace. It does not establish real Quickshell/Hyprland pixels, monitor hotplug/remap behavior, lock/unlock behavior, or stock renderer restoration on a new runtime revision.
 
-WP-01's original qualification is recorded in `docs/local-smoke.md`. WP-03 compositor/reliability qualification is recorded through FDM-867/FDM-913 evidence. Historical graphical picker/panel checks are superseded by the approved CLI/JSON-first plan.
+WP-01's original qualification is recorded in `docs/local-smoke.md`. WP-03 compositor/reliability qualification is recorded through FDM-867/FDM-913 evidence, with the final publication smoke recorded in FDM-869. Historical graphical picker/panel checks are superseded by the approved CLI/JSON-first plan.
