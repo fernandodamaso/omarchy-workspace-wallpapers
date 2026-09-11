@@ -63,6 +63,8 @@ omarchy plugin remove "$PLUGIN_ID"
 
 `omarchy plugin remove` removes the plugin checkout after disabling it. **It does not delete this plugin's desired configuration, applied snapshot, legacy metadata, or content-addressed images**, because those live outside the checkout. To erase that retained user data, delete it only as a separate explicit user action after reviewing the storage locations below.
 
+If you created the optional `$HOME/.local/bin/workspace-wallpapers` symlink above, Omarchy does not own that user-created link. Remove it separately only after `readlink` confirms that it points to this plugin's executable; never remove a non-symlink or an unrelated command at that path.
+
 For a code rollback without data loss, disable the plugin, move the checkout to a known-good revision, validate it, then re-enable it. Do not delete state or images:
 
 ```bash
