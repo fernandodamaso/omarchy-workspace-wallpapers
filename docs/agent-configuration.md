@@ -4,7 +4,7 @@ This guide is for a coding agent running in the user's Omarchy session. The repo
 
 ## Discover before changing anything
 
-Run the installed `workspace-wallpapers --help` and `--version --json`. Use only commands actually present. Node 22+ and the running Omarchy service are explicit dependencies; do not silently install, enable, restart or upgrade them. The approved CLI flow below requires FDM-912's transactional implementation, not merely the earlier offline CLI.
+Run the installed `workspace-wallpapers --help` and `--version --json`. Use only commands actually present. Node 22+ and the running Omarchy service are explicit dependencies; do not silently install, enable, restart or upgrade them. The approved CLI flow below requires the transactional apply implementation (validate, dry-run, explicit apply, status), not ad-hoc IPC calls.
 
 Read `AGENTS.md`, then inspect the selected desired JSON and structured runtime status. When desired configuration is absent on an existing installation, preview `config migrate --dry-run --json` and explicitly migrate before editing so unrelated legacy mappings are retained. Migration refuses an existing desired file and never applies changes.
 
