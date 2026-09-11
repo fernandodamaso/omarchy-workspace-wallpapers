@@ -1,9 +1,0 @@
-// Copy this entry into the user's Style menu extension; this example is not
-// installed or merged automatically.
-{
-  "style.workspace-wallpapers": {
-    "label": "Workspace Wallpapers",
-    "aliases": ["workspace-wallpapers"],
-    "action": "omarchy-shell shell summon io.github.fernandodamaso.workspace-wallpapers '{}'"
-  }
-}

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Workspace Wallpapers desired configuration v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "assignments"],
+  "properties": {
+    "version": { "const": 1 },
+    "assignments": {
+      "type": "object",
+      "maxProperties": 1024,
+      "propertyNames": {
+        "pattern": "^(?:id:(?:[1-9][0-9]{0,14}|[1-8][0-9]{15}|900[0-6][0-9]{12}|90070[0-9]{11}|90071[0-8][0-9]{10}|900719[0-8][0-9]{9}|9007199[0-1][0-9]{8}|90071992[0-4][0-9]{7}|900719925[0-3][0-9]{6}|9007199254[0-6][0-9]{5}|90071992547[0-3][0-9]{4}|9007199254740[0-8][0-9]{2}|90071992547409[0-8][0-9]|9007199254740990|9007199254740991)|name:(?!special(?::|$))[^\\u0000-\\u001f\\u007f]+)(?![\\s\\S])"
+      },
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^/[^\\u0000-\\u001f\\u007f]*\\.(?:[pP][nN][gG]|[jJ][pP][eE]?[gG]|[wW][eE][bB][pP])(?![\\s\\S])"
+      }
+    }
+  }
+}
