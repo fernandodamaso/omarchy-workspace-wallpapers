@@ -2,7 +2,7 @@
 
 Native per-workspace static wallpapers with JSON-first configuration and a coding-agent CLI. No graphical settings page, image browser, file/folder picker, or wallpaper/theme double-click gesture.
 
-> **Candidate, not a release:** the offline configuration commands, transactional `config apply`, `status`, and `doctor` are implemented on `feat/cli-first-configuration` in [PR #6](https://github.com/fernandodamaso/omarchy-workspace-wallpapers/pull/6). The candidate remains unmerged until [FDM-913](https://linear.app/fdamaso/issue/FDM-913) qualifies its exact SHA in a real Omarchy session. A GitHub commit does not update an installed plugin.
+The manifest and CLI report `0.1.0`. The CLI/runtime candidate was qualified locally at `4df6f3204c70a5daa58d0664dbac1b6cbce0f667` and integrated through PR #6. The release-preparation candidate contains documentation/metadata only; **v0.1.0 is not published until the exact release-candidate SHA passes FDM-869 final local smoke**.
 
 ## Desired configuration
 
@@ -22,32 +22,74 @@ Paths above are examples, not existing files. Missing matching mappings follow t
 
 The [JSON Schema](schemas/config.schema.json) rejects unknown properties, invalid shapes, noncanonical IDs and unsupported paths. The CLI additionally rejects duplicate decoded JSON keys and checks readable image bytes, MIME signatures and static containers. It does not expand `$HOME`, `~`, shell syntax, or URLs inside JSON. Shell metacharacters in literal absolute filenames remain data.
 
-## CLI setup
+## Install and CLI setup
 
-**Dependency: Node 22 or newer, both on the CLI's PATH and on the running shell service's PATH.** Live commands also require `omarchy-shell` and the matching enabled service. No npm packages, runtime network access or automatic dependency installation are required. Keep the candidate repository directory intact: the executable and service helper load sibling modules, model code and manifest.
+**Dependency: Node 22 or newer, both on the CLI's PATH and on the running shell service's PATH.** Live commands also require `omarchy-shell` and the matching enabled service. No npm packages, runtime network access or automatic dependency installation are required.
 
-From that persistent repository directory, inspect the installed interface:
+For the published/default-branch plugin, use Omarchy's native plugin lifecycle:
 
 ```bash
-node --version
-./bin/workspace-wallpapers --help
-./bin/workspace-wallpapers --version --json
+omarchy plugin add https://github.com/fernandodamaso/omarchy-workspace-wallpapers.git --enable
+omarchy plugin list --json
 ```
 
-Optional PATH registration: run `mkdir -p "$HOME/.local/bin"`, then `ln -s "$PWD/bin/workspace-wallpapers" "$HOME/.local/bin/workspace-wallpapers"`. This deliberately fails rather than overwriting an existing command. Ensure `$HOME/.local/bin` is already on PATH, or use the executable's absolute path. Do not copy only the executable away from its modules. Shell service dependency/PATH changes are explicit host setup, not an automatic CLI repair.
+Omarchy installs third-party plugins under `~/.config/omarchy/plugins/<plugin-id>/`. Keep that repository directory intact: the executable and service helper load sibling modules, model code and manifest. The plugin does not write into packaged Omarchy directories.
 
-## Edit, preview, apply
+Inspect the installed interface from the plugin checkout:
 
-For an existing installation without desired JSON, first preview migration with `./bin/workspace-wallpapers config migrate --dry-run --json`, then explicitly run `./bin/workspace-wallpapers config migrate --json`. Migration refuses an existing desired config, preserves legacy files, and never applies changes. Migrate before editing an existing installation so unrelated mappings are not omitted from the new whole-map configuration.
+```bash
+PLUGIN_ID=io.github.fernandodamaso.workspace-wallpapers
+PLUGIN_DIR="$HOME/.config/omarchy/plugins/$PLUGIN_ID"
+node --version
+"$PLUGIN_DIR/bin/workspace-wallpapers" --help
+"$PLUGIN_DIR/bin/workspace-wallpapers" --version --json
+```
+
+Optional PATH registration: run `mkdir -p "$HOME/.local/bin"`, then `ln -s "$PLUGIN_DIR/bin/workspace-wallpapers" "$HOME/.local/bin/workspace-wallpapers"`. This deliberately fails rather than overwriting an existing command. Ensure `$HOME/.local/bin` is already on PATH, or use the executable's absolute path. Do not copy only the executable away from its modules. Shell service dependency/PATH changes are explicit host setup, not an automatic CLI repair.
+
+## Update, disable, remove, and code rollback
+
+Omarchy's native lifecycle commands are reversible at the plugin boundary:
+
+```bash
+PLUGIN_ID=io.github.fernandodamaso.workspace-wallpapers
+omarchy plugin update "$PLUGIN_ID"
+omarchy plugin disable "$PLUGIN_ID"
+omarchy plugin enable "$PLUGIN_ID"
+omarchy plugin remove "$PLUGIN_ID"
+```
+
+`omarchy plugin update` fast-forwards the git-managed checkout, shows the diff, refuses incompatible local changes, and rolls back a revision that fails plugin validation. Disable unloads this clone so the stock `omarchy.background` renderer resumes ownership. Re-enable keeps the saved configuration and images.
+
+`omarchy plugin remove` removes the plugin checkout after disabling it. **It does not delete this plugin's desired configuration, applied snapshot, legacy metadata, or content-addressed images**, because those live outside the checkout. To erase that retained user data, delete it only as a separate explicit user action after reviewing the storage locations below.
+
+For a code rollback without data loss, disable the plugin, move the checkout to a known-good revision, validate it, then re-enable it. Do not delete state or images:
+
+```bash
+PLUGIN_ID=io.github.fernandodamaso.workspace-wallpapers
+PLUGIN_DIR="$HOME/.config/omarchy/plugins/$PLUGIN_ID"
+omarchy plugin disable "$PLUGIN_ID"
+git -C "$PLUGIN_DIR" fetch --tags origin
+git -C "$PLUGIN_DIR" checkout --detach 4df6f3204c70a5daa58d0664dbac1b6cbce0f667
+omarchy plugin validate "$PLUGIN_DIR"
+omarchy plugin enable "$PLUGIN_ID"
+```
+
+That pinned SHA is the locally qualified CLI/runtime candidate that preceded release-preparation docs. To return to ordinary updates later, switch the checkout back to its tracked default branch and fast-forward it before using `omarchy plugin update` again. If any revision behaves badly, disabling remains the immediate stock-renderer recovery path and leaves saved mappings/assets intact.
+
+## Edit, migrate, validate, preview, and apply
+
+For an existing installation without desired JSON, first preview migration with `workspace-wallpapers config migrate --dry-run --json`, then explicitly run `workspace-wallpapers config migrate --json`. Migration refuses an existing desired config, preserves legacy files, and never applies changes. Migrate before editing an existing installation so unrelated mappings are not omitted from the new whole-map configuration.
 
 Run each step separately and inspect its result before continuing:
 
 ```bash
-./bin/workspace-wallpapers assign 'id:2' '/absolute/path/to/work.png' --json
-./bin/workspace-wallpapers config validate --json
-./bin/workspace-wallpapers config apply --dry-run --json
-./bin/workspace-wallpapers config apply --json
-./bin/workspace-wallpapers status --json
+workspace-wallpapers assign 'id:2' '/absolute/path/to/work.png' --json
+workspace-wallpapers config validate --json
+workspace-wallpapers config apply --dry-run --json
+workspace-wallpapers config apply --json
+workspace-wallpapers status --json
+workspace-wallpapers doctor --json
 ```
 
 Replace the example image path with a real readable file. `clear 'id:2'` removes only that desired mapping; it also requires explicit apply. Configuration commands and `doctor` accept `--config /absolute/path/to/desired.json`; use the same selected file throughout a change. `status` reports the running service's applied state, not a selected desired file, and does not accept `--config`.
@@ -61,8 +103,8 @@ The CLI waits for its own request/session completion. A receipt marked `accepted
 ## Status, diagnostics and recovery
 
 ```bash
-./bin/workspace-wallpapers status --json
-./bin/workspace-wallpapers doctor --json
+workspace-wallpapers status --json
+workspace-wallpapers doctor --json
 ```
 
 Both commands are read-only. Status includes service readiness, busy state, revision, desired hash, last request/session identifiers, maps and storage paths. It reports the service's current in-memory snapshot; it does not silently reload files or apply desired edits. Doctor checks desired configuration/images, runtime compatibility/readiness and writer locks without changing the host.
@@ -71,7 +113,7 @@ Live commands accept `--timeout MS` from 1 through 120000, default 10000, for th
 
 On timeout, lost receipt, restart, or post-commit durability uncertainty, inspect status and establish worker liveness before another operation. **Never blindly repeat apply or assume rollback.** If persisted state must be re-inspected after recovery, the retained `omarchy-shell workspace-wallpapers reload` refreshes applied state only. Its invocation returning is not proof of completion: inspect status again and require readiness and the expected revision/hash. Reload never reads unapplied desired JSON.
 
-Rollback is a targeted desired-state edit followed by validation, dry-run and explicit apply, not a direct edit of applied files. Reconcile with newer changes first. Reusing a source path does not restore old pixels if its bytes changed; retain verified assets when exact restoration matters.
+Rollback of wallpaper configuration is a targeted desired-state edit followed by validation, dry-run and explicit apply, not a direct edit of applied files. Reconcile with newer changes first. Reusing a source path does not restore old pixels if its bytes changed; retain verified assets when exact restoration matters.
 
 ## Storage, migration and concurrency
 
@@ -108,11 +150,19 @@ Legacy `omarchy-shell workspace-wallpapers assign/clear/undo` signatures are ret
 
 The plugin does not uninstall Zenity or alter global Omarchy menus. Any custom settings menu entry copied from an older example is user-owned and is not automatically removed.
 
+## Tested compatibility and remaining release gate
+
+FDM-913 qualified runtime SHA `4df6f3204c70a5daa58d0664dbac1b6cbce0f667` on Omarchy `4.0.3-1`, Quickshell `0.3.1`, Qt `6.11.2`, Hyprland `0.56.2`, and Node `v26.7.0`, using DP-1 and HDMI-A-1 at 1920×1080 scale 1. The repository's Node requirement remains **22+**; that local gate is evidence for Node 26.7.0, not a claim that every future Node/Omarchy/Quickshell/Hyprland version is certified.
+
+The local gate exercised the CLI workflow, migration/failure recovery, real rendering, workspace switching, monitor movement, same-path refresh, decode fallback, theme/global fallback, native background refresh, and disable/re-enable stock restoration. Scratchpad, monitor hotplug, and lock/unlock were not exercised in that gate for the recorded local-safety reasons. FDM-869 therefore remains the required short exact-SHA release smoke before publication, including lock/unlock and release-candidate lifecycle checks.
+
+See [compatibility](docs/compatibility.md) for the pinned native reference and evidence boundaries.
+
 ## Agent instructions and qualification
 
 [Agent skill](skills/workspace-wallpapers/SKILL.md) · [customization and recovery recipes](docs/agent-configuration.md) · [repository instructions](AGENTS.md) · [approved design](docs/superpowers/specs/2026-09-10-cli-first-configuration-design.md) · [implementation plan](docs/superpowers/plans/2026-09-10-cli-first-configuration.md) · [local CLI/renderer gate](docs/cli-pivot-local-gate.md).
 
-Keep PR #6 draft until the complete pivot passes its exact-SHA local gate. The default-branch command `omarchy plugin add https://github.com/fernandodamaso/omarchy-workspace-wallpapers.git --enable` installs main, not this candidate branch. Candidate installation and rollback belong to the local agent using the host's actual lifecycle tools. Do not replace a dirty checkout, delete images or edit packaged Omarchy files.
+PR #6 integrated the locally qualified CLI/runtime candidate. FDM-868 release preparation must remain documentation/metadata-only unless a runtime defect is reproduced and locally requalified. The exact release-preparation head must remain Draft/unmerged until FDM-869 tests that SHA; only FDM-874 publishes v0.1.0.
 
 ```bash
 node --test tests/*.test.cjs
@@ -121,8 +171,8 @@ git diff --check
 git diff --check origin/main...HEAD
 ```
 
-Tests cover spawned offline/live CLI behavior, real service-helper subprocesses, injected write failures, correlated completion, timeouts/conflicts, data retention, no-UI boundaries, and retained model/rendering contracts. Headless checks do not establish real QML loading, pixels, hotplug, lock/unlock or stock renderer restoration. Historical picker/focus instructions in earlier runbooks are superseded by the new local gate. Agents own review and acceptance; no ceremonial user code-review step is required.
+Tests cover spawned offline/live CLI behavior, real service-helper subprocesses, injected write failures, correlated completion, timeouts/conflicts, data retention, no-UI boundaries, and retained model/rendering contracts. Headless checks do not establish real QML loading, pixels, hotplug, lock/unlock or stock renderer restoration. Historical picker/focus instructions in earlier runbooks are superseded by the CLI/JSON-first gate. Agents own review and acceptance; no ceremonial user code-review step is required.
 
-PNG, JPEG and static WebP only. No video, playlists, scheduling, randomization, TUI, web UI, MCP server or runtime network daemon. See [compatibility](docs/compatibility.md) for the pinned native reference, not blanket certification for all Omarchy versions.
+PNG, JPEG and static WebP only. No video, playlists, scheduling, randomization, TUI, web UI, MCP server or runtime network daemon.
 
 MIT. See [LICENSE](LICENSE) and [third-party notices](docs/third-party-notices.md).
