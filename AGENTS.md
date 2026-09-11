@@ -4,10 +4,10 @@ This repository configures **workspace wallpapers**, not SmartDock. Preserve the
 
 ## Configure an installed plugin
 
-1. Run `workspace-wallpapers --help` and `workspace-wallpapers --version --json`. Discover the installed commands instead of assuming the candidate branch has been installed. Node 22+ is required. Do not install dependencies, change PATH or enable plugins silently.
+1. Run `workspace-wallpapers --help` and `workspace-wallpapers --version --json`. Discover the installed commands instead of assuming a repository branch is installed. Node 22+ is required. Do not install dependencies, change PATH or enable plugins silently.
 2. Inspect the selected desired file and available runtime status. Desired JSON lives at `${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/workspace-wallpapers/config.json`. Existing installations can use `config migrate --dry-run --json`, then explicit migration only when desired config is absent. Preserve legacy files and all images.
 3. Make the smallest requested desired-map change using `assign KEY PATH`, `clear KEY`, or an atomic/conflict-checked JSON edit. Never write service-owned applied state. Preserve unrelated assignments. Quote exact keys and absolute paths; never evaluate config values as shell code.
-4. Run `config validate --json`, then `config apply --dry-run --json` and inspect its changes before explicit `config apply --json`. Apply commands are available only after the transactional runtime slice is installed. Do not substitute legacy IPC when those commands are absent.
+4. Run `config validate --json`, then `config apply --dry-run --json` and inspect its changes before explicit `config apply --json`. Do not substitute legacy IPC when those commands are absent.
 5. Inspect the request-specific completion and resulting status. Report separately what was edited, what was applied/persisted, and what was actually rendered. An accepted request or a zero exit from raw IPC is not proof of persistence. On timeout/restart/unknown completion, inspect status before any retry; do not blindly apply again.
 
 No ceremonial user acceptance is required for a configuration change the user already requested. Ask only for genuinely missing intent, credentials, destructive permission or physical/local actions unavailable to the agent.
@@ -39,4 +39,8 @@ git diff --check origin/main...HEAD
 
 Record exact commit, commands and results. Agents own review and issue completion; do not ask the user to approve AI-generated code as a queue step. Headless tests do not prove QML loading, rendered pixels, monitor hotplug, lock/unlock or stock renderer restoration.
 
-Continue the shared `feat/cli-first-configuration` / PR #6; never reopen abandoned UI PR #5. Keep the candidate draft/unmerged until FDM-913 qualifies the complete exact SHA in the actual Omarchy session. Local agents consume the remote implementation and fix only reproduced runtime defects, rather than rebuilding it locally. When completing an issue, name and link the next executable issue with its continuation instructions.
+## v0.1 release baseline
+
+PR #6 integrated the FDM-913-qualified CLI/runtime candidate `4df6f3204c70a5daa58d0664dbac1b6cbce0f667` into `main`. FDM-869 then passed the final real-Omarchy release smoke on release-preparation SHA `0819599e3fe1c315deb645258783b06fee1e7ec7`, including lock/unlock, restart, disable/re-enable, update/remove/reinstall recovery, assigned/global rendering and rapid switching.
+
+Commits after that smoke in the v0.1 publication path are documentation/agent-instruction or merge-only changes. Any future change to runtime QML, CLI/model behavior, service ownership or rendering requires focused local requalification of the affected scenario before it is released. Never reopen abandoned UI PR #5 or merged implementation PR #6 as active work.

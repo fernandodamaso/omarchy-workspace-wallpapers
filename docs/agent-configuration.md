@@ -1,10 +1,10 @@
 # Configure wallpapers from a user request
 
-This guide is for a coding agent running in the user's Omarchy session. The repository's remote implementation work does not imply this branch is installed on that machine. This plugin changes workspace wallpapers, not dock settings or application themes.
+This guide is for a coding agent running in the user's Omarchy session. A repository branch existing on GitHub does not imply that version is installed on the machine. This plugin changes workspace wallpapers, not dock settings or application themes.
 
 ## Discover before changing anything
 
-Run the installed `workspace-wallpapers --help` and `--version --json`. Use only commands actually present. Node 22+ and the running Omarchy service are explicit dependencies; do not silently install, enable, restart or upgrade them. The approved CLI flow below requires FDM-912's transactional implementation, not merely the earlier offline CLI.
+Run the installed `workspace-wallpapers --help` and `--version --json`. Use only commands actually present. Node 22+ and the running Omarchy service are explicit dependencies; do not silently install, enable, restart or upgrade them. The approved CLI flow below requires the transactional apply implementation (validate, dry-run, explicit apply, status), not ad-hoc IPC calls.
 
 Read `AGENTS.md`, then inspect the selected desired JSON and structured runtime status. When desired configuration is absent on an existing installation, preview `config migrate --dry-run --json` and explicitly migrate before editing so unrelated legacy mappings are retained. Migration refuses an existing desired file and never applies changes.
 
@@ -66,4 +66,4 @@ Rollback is another explicit desired-state change and apply, not direct editing 
 
 Keep the report short: requested workspace/key, selected source, actual command outcome, whether the applied snapshot was verified, and any remaining local rendering uncertainty. Never equate “desired JSON saved,” “request accepted,” “configuration persisted,” and “pixels rendered.” The CLI may establish persistence while reporting render verification as unknown.
 
-Agent inspection and verification are part of the work, not a user approval ritual. For development, the shared candidate remains unmerged until FDM-913 verifies the complete exact SHA in Omarchy. Only physical/session actions, credentials or destructive decisions genuinely unavailable to the agent require user participation.
+Agent inspection and verification are part of the work, not a user approval ritual. The v0.1 release baseline was qualified in a real Omarchy session; future runtime behavior changes still require appropriate local requalification. Documentation-only changes do not require repeating compositor qualification. Only physical/session actions, credentials or destructive decisions genuinely unavailable to the agent require user participation.
