@@ -1,8 +1,25 @@
 # Compatibility
 
+## v0.1 qualification evidence
+
+The CLI/runtime candidate `4df6f3204c70a5daa58d0664dbac1b6cbce0f667` passed the FDM-913 local qualification on 2026-09-11 with:
+
+| Component | Qualified version/evidence |
+| --- | --- |
+| Omarchy | `4.0.3-1` |
+| Quickshell | `0.3.1` |
+| Qt | `6.11.2` |
+| Hyprland | `0.56.2` |
+| Node | `v26.7.0` locally; repository requirement remains Node 22+ |
+| Displays | DP-1 + HDMI-A-1, both 1920×1080 scale 1 |
+
+The exact remote candidate CI was run on Node `22.23.2` and passed 112 tests with zero failures/skips plus import-helper syntax and whitespace checks. These records establish evidence for the versions above; they are not blanket certification for arbitrary future Omarchy, Quickshell, Hyprland, Qt, or Node revisions.
+
+FDM-913 exercised desired configuration, migration, validation, dry-run, explicit apply, status/doctor, concurrency/failure paths, real rendering, rapid workspace switching, a Unicode named workspace, absent/global fallback, id-over-name precedence, workspace movement between monitors, same-path image replacement, decode-failure fallback, native background/theme refresh, and disable/re-enable stock-renderer restoration. Scratchpad, monitor hotplug, and lock/unlock were not exercised there for the recorded local-safety reasons. The exact release-preparation SHA therefore still requires the short FDM-869 final smoke before publication.
+
 ## Reference snapshot
 
-FDM-863 and the FDM-866 source review use Omarchy `quattro` commit:
+FDM-863 and the FDM-866 source review used Omarchy `quattro` commit:
 
 ```text
 5b91db503c904bbfc5f34bdaaa9c708814958f3d
@@ -16,9 +33,7 @@ Reference inspected on 2026-09-08:
 - `docs/omarchy-shell.md`
 - `bin/omarchy-shell`
 
-The plugin manifest uses schema version 1, id `io.github.fernandodamaso.workspace-wallpapers`, kinds `service` and `panel` (WP-02), and `omarchy.clonedFrom: "omarchy.background"`.
-
-The WP-02 panel (`Settings.qml`) follows the shell's panel contract: the host injects `shell` (the capability-scoped `PluginShellApi`), `manifest` (the public manifest), and `service` (the plugin's own service instance), and drives `open(payloadJson)`/`close()`. The panel reaches its own service through `shell.serviceFor(manifest.id)` and observes completions through the service root's `operationFinished(result)` signal; the identically-payloaded IPC signal on the `workspace-wallpapers` handler remains for CLI clients. Picker directories mirror `omarchy-theme-bg-switcher`: `~/.local/state/omarchy/current/theme/backgrounds` and `~/.config/omarchy/backgrounds/$(cat ~/.local/state/omarchy/current/theme.name)`.
+The v0.1 manifest uses schema version 1, id `io.github.fernandodamaso.workspace-wallpapers`, kind `service`, and `omarchy.clonedFrom: "omarchy.background"`. Graphical configuration/panel registration was removed by the approved CLI/JSON-first pivot; `WorkspaceWallpaperPanel.qml` remains only because it is the native per-monitor wallpaper renderer.
 
 ## Native background compatibility surface
 
@@ -32,7 +47,7 @@ transition(fromPath: string, path: string): void
 themeTransition(fromPath: string, path: string, finalPath: string, colorsB64: string, shellB64: string): void
 ```
 
-The stock service remains screen-variant based and advances `backgroundVersion` when a background transition is accepted. FDM-866 adds its own event-driven `renderRevision` because a reliability refresh must invalidate a same-path image even when the logical path has not changed.
+The stock service remains screen-variant based and advances `backgroundVersion` when a background transition is accepted. The plugin adds its own event-driven `renderRevision` because a reliability refresh must invalidate a same-path image even when the logical path has not changed.
 
 `themeTransition` keeps accepting the native colors/shell payload. The v0.1 clone applies those theme payloads independently from per-workspace image decoding so a broken assigned wallpaper cannot block shell recoloring. The clone intentionally does not reproduce the stock reveal animation.
 
@@ -45,7 +60,7 @@ Normal workspace lookup order is:
 
 Workspace names are not trimmed or ASCII-normalized; spaces and Unicode remain part of the key. A workspace named exactly `special` or beginning with `special:` is excluded even if Hyprland exposes an id for it.
 
-Each screen resolves its Hyprland monitor with `Hyprland.monitorFor(screen)` and reads that monitor's `activeWorkspace`. FDM-866 also retains the last normal workspace per screen while a `special:*` workspace is active. Real monitor movement/hotplug behavior remains a local FDM-867 gate.
+Each screen resolves its Hyprland monitor with `Hyprland.monitorFor(screen)` and reads that monitor's `activeWorkspace`. The renderer retains the last normal workspace per screen while a `special:*` workspace is active. FDM-913 qualified workspace movement between the two available monitors; monitor hotplug itself remains outside that evidence.
 
 ## Reliability model
 
@@ -55,36 +70,60 @@ An assigned image decode failure tries the current global Omarchy background onc
 
 Renderer URLs are generation-tagged and use `cache: false`; state/background reloads increment `renderRevision`, allowing same-path replacements to be decoded again without polling.
 
+The CLI/runtime apply model is separate from pixels: successful `applied`/`unchanged` completion establishes persisted state, not rendered verification. Timeout/restart/unknown completion is reported explicitly and must be reconciled with status rather than blindly retried.
+
 ## Static-only boundary
 
-v0.1 accepts only files whose imported MIME type is one of:
+v0.1 accepts only static files whose imported MIME type is one of:
 
 - `image/png`
 - `image/jpeg`
 - `image/webp`
 
-The QML renderer uses `Image` with `Image.PreserveAspectCrop`. No video/media renderer is included in v0.1.
+The QML renderer uses `Image` with `Image.PreserveAspectCrop`. No video/media renderer, playlist, scheduler, randomizer, online catalog, or external wallpaper daemon is included in v0.1.
 
-This also means the stock global-background fallback must resolve to PNG, JPEG, or WebP. A global video background is unsupported and may render as the panel's black fallback until a static background is selected or the plugin is disabled.
+This also means the stock global-background fallback must resolve to PNG, JPEG, or static WebP. A global video background is unsupported and may render as the panel's black fallback until a static background is selected or the plugin is disabled.
 
-## Persistence
+## Persistence and data retention
 
-Assignments are stored at:
+Desired configuration is human/agent-owned at:
 
 ```text
-~/.config/omarchy/workspace-wallpapers/assignments.json
+${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/workspace-wallpapers/config.json
 ```
 
-Imported files are stored at:
+The service-owned applied snapshot is stored at:
+
+```text
+${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/workspace-wallpapers/applied.json
+```
+
+Content-addressed imported files are stored at:
 
 ```text
 ${XDG_DATA_HOME:-$HOME/.local/share}/omarchy/workspace-wallpapers/images/<sha256>.<ext>
 ```
 
-The import helper validates MIME before copying and uses a content-addressed filename. The state parser discards invalid workspace keys and unsupported image paths rather than loading them. Missing/corrupt state is handled in memory and is not rewritten merely because loading failed.
+Legacy metadata remains under:
+
+```text
+~/.config/omarchy/workspace-wallpapers/assignments.json
+~/.config/omarchy/workspace-wallpapers/preferences.json
+~/.config/omarchy/workspace-wallpapers/history.json
+```
+
+Migration creates desired configuration only when explicitly requested and never overwrites an existing desired file. The first explicit apply establishes the applied snapshot; invalid new input preserves last-good state. Runtime writes use private locks/temp files and atomic publication. Cleanup removes only owned temporary/lock files. There is no automatic user-data deletion or image garbage collection.
+
+Disabling/re-enabling the plugin leaves all of these files intact. Native Omarchy plugin removal deletes or unlinks the plugin checkout, not these external config/state/data locations, so mappings/assets remain available for reinstall/recovery unless the user explicitly deletes them separately.
+
+## Release/recovery boundary
+
+The immediate reversible recovery is `omarchy plugin disable io.github.fernandodamaso.workspace-wallpapers`, which restores the stock `omarchy.background` owner without deleting saved state. The locally qualified pre-release runtime SHA is `4df6f3204c70a5daa58d0664dbac1b6cbce0f667`; a code rollback may pin the plugin checkout to that revision, validate it, and re-enable it while preserving desired/applied/legacy state and images.
+
+The release-preparation work after that SHA is documentation/metadata-only. If any later candidate changes runtime QML/CLI/model behavior, the affected local scenario must be requalified before release.
 
 ## What GitHub CI does not establish
 
-Headless CI validates JavaScript model behavior, source contracts, Bash syntax, and whitespace. It does not establish real Quickshell/Hyprland rendering, workspace movement, monitor hotplug/remap behavior, theme-transition visuals, picker focus, or lock/unlock behavior.
+Headless CI validates JavaScript/CLI behavior, subprocess/runtime-helper contracts, source/model behavior, Bash syntax, retention/no-UI boundaries, and whitespace. It does not establish real Quickshell/Hyprland pixels, monitor hotplug/remap behavior, lock/unlock behavior, or stock renderer restoration on a new exact release SHA.
 
-WP-01's original qualification is recorded in `docs/local-smoke.md`. WP-03 compositor/reliability qualification is delegated to FDM-867 via `docs/wp03-local-gate.md`.
+WP-01's original qualification is recorded in `docs/local-smoke.md`. WP-03 compositor/reliability qualification is recorded through FDM-867/FDM-913 evidence. Historical graphical picker/panel checks are superseded by the approved CLI/JSON-first plan.
